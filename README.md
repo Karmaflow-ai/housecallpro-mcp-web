@@ -1,335 +1,122 @@
-# 🏠 Housecall Pro MCP Servers
+# Housecall Pro MCP Servers
 
-A comprehensive collection of **Model Context Protocol (MCP) servers** for the Housecall Pro API, enabling Claude Desktop and other LLM with MCP capability to seamlessly interact with your Housecall Pro field service management system. Each server is specialized for a specific domain, providing modular access to customers, jobs, scheduling, invoicing, materials, and more.
+Unified Model Context Protocol (MCP) access to the complete Housecall Pro API. This
+repository ships with a **single FastMCP server** that exposes every domain tool
+(customers, jobs, scheduling, invoicing, and more) to desktop or remote AI clients.
 
-## 🚀 Overview
+## Highlights
+- 20+ Housecall Pro API domains registered on one server with consistent namespaces
+- Web-ready deployment via SSE or streamable HTTP transports with configurable host/port
+- Supports Claude Desktop, Claude API with MCP, and any compliant MCP client
+- Per-request API key support: send a Bearer token (Authorization header) from your app
 
-This project provides **20+ specialized MCP servers** that expose the full Housecall Pro API through Claude Desktop or other LLMs. Whether you're managing customers, scheduling jobs, processing invoices, or tracking materials, these servers give you powerful AI-assisted access to your field service operations.
+## Requirements
+- Python 3.10+
+- Pip / uv / Poetry (any modern Python package manager)
+- Housecall Pro API key for each agent or tenant using the server
 
-## 🏗️ Architecture
-
-Each Housecall Pro API domain has its own dedicated MCP server for focused, efficient operations:
-
-### 📋 Core Business Operations
-- **`housecallpro_customers.py`** - Customer & address management
-- **`housecallpro_jobs.py`** - Job management, scheduling & dispatch
-- **`housecallpro_employees.py`** - Employee management & filtering
-- **`housecallpro_appointments.py`** - Appointment scheduling & status management
-
-### 💰 Financial Management
-- **`housecallpro_invoices.py`** - Invoice management & payments
-- **`housecallpro_invoices_query.py`** - Advanced invoice querying
-- **`housecallpro_job_invoices.py`** - Job-specific invoice operations
-- **`housecallpro_estimates.py`** - Estimate creation & management
-
-### 📦 Inventory & Materials
-- **`housecallpro_materials.py`** - Materials management & pricing
-- **`housecallpro_material_categories.py`** - Material category organization
-- **`housecallpro_price_forms.py`** - Price book & form management
-
-### 🎯 Sales & Marketing
-- **`housecallpro_leads.py`** - Lead management & conversion
-- **`housecallpro_lead_sources.py`** - Lead source tracking
-- **`housecallpro_tags.py`** - Tag management & organization
-
-### ⚙️ System & Configuration
-- **`housecallpro_company.py`** - Company information & settings
-- **`housecallpro_job_types.py`** - Job type configuration
-- **`housecallpro_schedule.py`** - Schedule management
-- **`housecallpro_events.py`** - Event & calendar management
-- **`housecallpro_webhooks.py`** - Webhook configuration & management
-- **`housecallpro_application.py`** - Application settings & preferences
-- **`housecallpro.py`** - Unified server with core functionality
-
-## 🌟 Key Features
-
-### 📋 Customer Management (`housecallpro_customers.py`)
-
-**Customer Operations**
-- **Get Customers** - List customers with advanced filtering (search, date ranges, pagination)
-- **Get Customer by ID** - Retrieve detailed customer profiles
-- **Create Customer** - Add new customers with complete information
-- **Update Customer** - Modify existing customer details
-
-**Address Management**
-- **Get Customer Addresses** - List all addresses for customers
-- **Get Customer Address by ID** - Retrieve specific address details
-- **Create Customer Address** - Add service locations to customers
-
-### 👥 Employee Management (`housecallpro_employees.py`)
-
-**Employee Operations**
-- **Get Employees** - List employees with filtering by:
-  - Active status, role, tags
-  - Name, email, phone search
-  - Custom pagination and sorting
-- **Get Employee by ID** - Detailed employee profiles including:
-  - Personal details (contact info, avatar)
-  - Employment info (role, hire date, status)
-  - Permissions and access levels
-  - Tags and metadata
-
-### 💼 Job Management (`housecallpro_jobs.py`)
-
-**Core Job Operations**
-- **Get Jobs** - Advanced job listing with filters for:
-  - Status (scheduled, in_progress, completed, cancelled)
-  - Customer, employee, date ranges
-  - Job number, description, address search
-  - Work status, business unit, tags
-- **Get Job by ID** - Complete job details including line items, scheduling, attachments
-- **Create Job** - Full job creation with customer assignment, scheduling, dispatch
-
-**Job Scheduling & Dispatch**
-- **Update Job Schedule** - Modify timing and appointments
-- **Delete Job Schedule** - Remove scheduled appointments
-- **Dispatch Job to Employees** - Assign technicians and crews
-
-**Line Item Management**
-- **Get/Add/Update/Delete Job Line Items** - Complete line item operations
-- **Bulk Update Line Items** - Efficient batch updates
-- **Get/Update Job Input Materials** - Material usage tracking
-
-**Job Documentation**
-- **Add Job Attachments** - Upload files, photos, documents
-- **Add/Delete Job Notes** - Internal communication and tracking
-- **Create Job Links** - External resource management
-- **Add/Remove Job Tags** - Organization and categorization
-
-### 📅 Appointment Management (`housecallpro_appointments.py`)
-
-**Core Appointment Operations**
-- **Get Appointments** - List with filtering by customer, employee, status, dates
-- **Get Appointment by ID** - Detailed appointment information
-- **Create/Update/Delete Appointments** - Full appointment lifecycle management
-
-**Scheduling & Management**
-- **Reschedule Appointment** - Move appointments with customer notifications
-- **Get Appointment Availability** - Find available scheduling slots
-- **Send Appointment Reminder** - Customer communication automation
-
-**Status Management**
-- **Mark Appointment Arrived/Started/Completed** - Real-time status tracking
-- **Mark Appointment No Show** - Handle customer no-shows
-
-### 💰 Invoice Management (`housecallpro_invoices.py`)
-
-**Invoice Operations**
-- **Get Invoices** - Advanced filtering by status, customer, dates, payment status
-- **Get Invoice by ID** - Complete invoice details with line items and attachments
-- **Create Invoice** - Generate invoices from jobs with custom terms
-- **Update Invoice** - Modify amounts, due dates, terms, messages
-
-**Payment & Processing**
-- **Send Invoice** - Email/SMS delivery with custom messages
-- **Mark Invoice Paid** - Record payments with multiple methods
-- **Void Invoice** - Cancel invoices with reason tracking
-- **Get Invoice Payments** - Payment history and tracking
-
-**Line Item Management**
-- **Add/Update/Delete Invoice Line Items** - Detailed invoice composition
-- **Get Invoice Attachments** - Supporting documentation
-- **Download Invoice PDF** - Generate formatted invoices
-
-### 📦 Materials Management (`housecallpro_materials.py`)
-
-**Material Operations**
-- **Get Materials** - List materials by category with filtering
-- **Get Material Categories** - Hierarchical category browsing
-- **Find Category by Name** - Search category structures
-- **Create/Update/Delete Materials** - Complete material lifecycle
-
-### 💡 Estimate Management (`housecallpro_estimates.py`)
-
-**Estimate Operations**
-- **Get Estimates** - Filter by status, customer, employee, dates
-- **Get Estimate by ID** - Complete estimate details with options
-- **Create Estimate** - Generate estimates with multiple options
-
-**Estimate Option Management**
-- **Create Estimate Option Attachments/Links** - Supporting documentation
-- **Update Estimate Option Schedule** - Timeline management
-- **Create/Delete Estimate Option Notes** - Internal tracking
-
-### 🎯 Lead Management (`housecallpro_leads.py`)
-
-**Lead Operations**
-- **Get Leads** - Advanced filtering by source, status, employee, dates
-- **Get Lead by ID** - Complete lead information and history
-- **Create Lead** - Capture new prospects with full details
-- **Update Lead** - Modify lead information and status
-- **Convert Lead** - Transform leads into customers
-
-**Lead Communication**
-- **Add Lead Note** - Track communications and follow-ups
-- **Delete Lead Note** - Clean up lead history
-
-### 🏷️ Organization & Tagging (`housecallpro_tags.py`)
-
-**Tag Management**
-- **Get Tags** - List all available tags with filtering
-- **Get Tag by ID** - Detailed tag information
-- **Create Tag** - Add new organizational tags
-- **Update Tag** - Modify tag properties
-- **Delete Tag** - Remove unused tags
-
-### ⚙️ System Configuration
-
-**Company Management (`housecallpro_company.py`)**
-- **Get Company Info** - Business details and settings
-
-**Job Types (`housecallpro_job_types.py`)**
-- **Get Job Types** - List available service types with pricing
-
-**Schedule Management (`housecallpro_schedule.py`)**
-- **Get Schedule** - View technician schedules and availability
-
-**Events (`housecallpro_events.py`)**
-- **Get Events** - Calendar events and scheduling conflicts
-
-**Webhooks (`housecallpro_webhooks.py`)**
-- **Get/Create/Update/Delete Webhooks** - Real-time integration management
-
-## Prerequisites
-
-- Python 3.8+
-- [uv](https://docs.astral.sh/uv/) package manager
-- Housecall Pro API key
-- Claude Desktop application or other MCP LLM client
-
-## Setup Instructions
-
-### 1. Install uv (if not already installed)
-
-**Windows:**
-```powershell
-powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-```
-
-**macOS/Linux:**
-```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-```
-
-### 2. Clone and Setup Project
+Install dependencies:
 
 ```bash
-git clone https://github.com/BuildWithBeacon/housecallpro-mcp.git
-cd HousecallPro-mcp
+pip install -r requirements.txt
+# or
 uv sync
 ```
-Or download ZIP and extract to chosen directory.
 
-### 3. Get Housecall Pro API Key
+## Providing Housecall Pro API Keys
+The MCP server expects the Housecall Pro API key to arrive with each request:
 
-1. Log into your Housecall Pro account
-2. Go to App Store > API Key Management > Generate
-3. Generate your API key
-4. Copy your API key (keep it secure!)
+1. Configure your MCP client (or agent management UI) to send the API key as an
+   `Authorization: Bearer <HOUSECALL_PRO_API_KEY>` header.
+2. Optional: supply a fallback key for local testing by setting
+   `HOUSECALL_PRO_API_KEY` (env var) or passing `--fallback-api-key` when starting
+   the server.
+3. When fallback is omitted and `--require-api-key-header` remains enabled
+   (default), requests without the Authorization header receive an authentication
+   error.
 
-### 4. Environment Setup
+### Example configuration
+If your app lets you add custom headers, simply paste the Housecall Pro API key
+into the "API Key" field when selecting the **API Key (Bearer)** auth type. Any
+extra headers (e.g., `{"X-Org": "Acme"}`) are forwarded untouched.
 
-Change ".env.example" to ".env"
-Fill in API Key with no space after =
+## Unified Server
+Run the server locally (stdio transport) for development with an env fallback:
 
-
-### 5. Configure Claude Desktop
-
-#### Copy the claude_desktop.json template and paste into your AI MCP server config.
-
-
-#### Update paths in `claude_desktop_config.json`:
-
-> **Note**: The API key will be automatically read from your `.env` file - no need to include it in the JSON configuration.
-
-> **Important**: If `uv` is not in your system PATH, replace `"uv"` with the full path to the uv executable (e.g., `"C:\\Users\\YourUsername\\.cargo\\bin\\uv.exe"` on Windows).
-
-**Windows:**
-```json
-{
-  "mcpServers": {
-    "housecall-pro-customers": {
-      "command": "uv",
-      "args": [
-        "--directory",
-        "C:\\\\Users\\\\YourUsername\\\\path\\\\to\\\\HousecallPro-mcp",
-        "run",
-        "housecallpro_customers.py"
-      ]
-    }
-  }
-}
+```bash
+python housecallpro_server.py --transport stdio --fallback-api-key $Env:HOUSECALL_PRO_API_KEY --no-require-api-key-header
 ```
-## Etc. Add all servers from the template provided and change the path to where you cloned.
 
+Expose the server on the network using SSE (default host/port shown), requiring
+clients to send the API key header:
 
-**macOS/Linux:**
-```json
-{
-  "mcpServers": {
-    "housecall-pro-customers": {
-      "command": "uv",
-      "args": [
-        "--directory",
-        "/Users/yourusername/path/to/HousecallPro-mcp",
-        "run",
-        "housecallpro_customers.py"
-      ]
-    }
-  }
-}
+```bash
+python housecallpro_server.py \
+  --host 0.0.0.0 \
+  --port 8000 \
+  --transport sse \
+  --auth-issuer-url https://mcp.example.com/issuer \
+  --auth-resource-url https://mcp.example.com
 ```
-## Etc. Add all servers from the template provided and change the path to where you cloned.
 
-### 6. Restart Claude Desktop
+Environment variable overrides:
 
-After configuring, restart Claude Desktop to load the new MCP server. You should now see the MCP servers available in the search and tools tab.
+| Variable | Default | Description |
+| --- | --- | --- |
+| `HOUSECALL_PRO_API_KEY` | _unset_ | Optional fallback API key when Authorization header is missing |
+| `HOUSECALLPRO_REQUIRE_API_KEY_HEADER` | `1` | Set to `0` to allow missing Authorization headers |
+| `HOUSECALLPRO_AUTH_ISSUER_URL` | `https://mcp.local/issuer` | Issuer URL advertised to clients |
+| `HOUSECALLPRO_AUTH_RESOURCE_URL` | `http://localhost` | Resource server URL advertised to clients |
+| `HOUSECALLPRO_REQUIRED_SCOPES` | _unset_ | Comma-separated scopes to embed in auth responses |
+| `HOUSECALLPRO_HOST` | `0.0.0.0` | Bind address for SSE/HTTP transports |
+| `HOUSECALLPRO_PORT` | `8000` | Listening port |
+| `HOUSECALLPRO_TRANSPORT` | `sse` | Default transport (`stdio`, `sse`, `streamable-http`) |
+| `HOUSECALLPRO_MOUNT_PATH` | `/mcp` | Base path when using SSE |
+| `HOUSECALLPRO_LOG_LEVEL` | `INFO` | FastMCP log level |
 
-![image](https://github.com/user-attachments/assets/2034688f-d97c-4a42-b3f1-a78e34b50714)
+Tools are namespaced by domain (`<namespace>.<tool>`). Examples:
 
+| Namespace | Example Tools |
+| --- | --- |
+| `customers` | `customers.get_customers`, `customers.create_customer` |
+| `jobs` | `jobs.get_jobs`, `jobs.create_job`, `jobs.add_job_note` |
+| `invoices` | `invoices.get_invoice`, `invoices.create_invoice_payment` |
+| `schedule` | `schedule.get_schedule`, `schedule.update_schedule_settings` |
+| `webhooks` | `webhooks.list_webhooks`, `webhooks.create_webhook` |
 
-## 📝 Usage Examples
+The full server currently registers 96 tools across 20 modules.
 
-Once configured, you can ask Claude things like:
+## Client Configuration
 
-- "Show me all customers"
-- "Get me the customer ID for "name" "
-- "Create a new customer named John Doe"
-- "List all addresses for customer 12345"
-- "Add a new address for customer 12345"
+### Claude Desktop (stdio)
+Update `claude_desktop_config.json` with the template in
+`claude_desktop.json.template`, then restart Claude Desktop. For stdio, provide
+an env fallback API key or run the server with `--no-require-api-key-header`.
 
-## 🛠️ Troubleshooting
+### Remote MCP Clients (SSE / streamable HTTP)
+1. Deploy the server on your infrastructure (VM, container, etc.).
+2. Configure TLS and networking (reverse proxy, firewall rules, etc.).
+3. Point your MCP client at the SSE endpoint, typically
+   `https://your-domain.example/mcp/sse` with message endpoint
+   `https://your-domain.example/mcp/messages/` (matching `--mount-path`).
+4. Supply the Housecall Pro API key via `Authorization: Bearer <token>`.
+5. Rotate the keys regularly and store them in your platform's secret manager.
 
-### Common Issues:
+## Deployment Checklist
+1. Provision secrets (Housecall Pro API keys, optional fallback).
+2. Run `housecallpro_server.py` with the desired transport and auth metadata.
+3. Terminate TLS at your reverse proxy and forward to the server's port.
+4. Verify connectivity with the `mcp` CLI or your MCP-capable agent.
+5. Monitor logs for rate limits and errors from the Housecall Pro API.
 
-1. **"Server not found"**
-   - Check that the path in `claude_desktop_config.json` is correct
-   - Ensure `uv` is installed and accessible
-   - If `uv` command not found, either:
-     - Add `uv` to your system PATH, or
-     - Use the full path to `uv` in the configuration (e.g., `C:\\Users\\YourUsername\\.cargo\\bin\\uv.exe` on Windows)
+## Development Notes
+- Domain modules keep their dedicated FastMCP instances for backwards
+  compatibility. The unified server (`housecallpro_server.py`) imports these
+  modules and re-registers their tools with namespaced identifiers.
+- Add new API coverage by creating a `housecallpro_<domain>.py` file with tools,
+  then append it to `DEFAULT_MODULES` in `housecallpro_server.py`.
+- Run `python -m unittest` or your preferred testing strategy before deploying
+  changes.
 
-2. **"Authentication failed"**
-   - Verify your API key in the `.env` file
-   - Check that your Housecall Pro API key has the necessary permissions
-
-3. **"Permission denied"**
-   - Make sure the Python file is executable
-   - Check that uv has proper permissions
-
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Add your improvements
-4. Submit a pull request
-
-## 📄 License
+## License
 It Aint, Use It As You Will
-
-## 🔗 Related Links
-
-- [Housecall Pro API Documentation](https://docs.housecallpro.com/)
-- [Model Context Protocol](https://modelcontextprotocol.io/)
-- [Claude Desktop](https://claude.ai/desktop) 
