@@ -198,12 +198,11 @@ def main() -> None:
     server.settings.mount_path = mount_path
     server.settings.streamable_http_path = mount_path
 
-    if args.transport == "sse":
-        server.settings.sse_path = mount_path
-        server.run(transport="sse", mount_path=mount_path)
-    else:
-        server.run(transport=args.transport)
+    transport = "streamable-http"
+    if args.transport != transport:
+        print(f"Overriding transport {args.transport!r} to {transport!r}")
 
+    server.run(transport=transport)
 
 if __name__ == "__main__":
     main()
