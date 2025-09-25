@@ -68,13 +68,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--transport",
         choices=("stdio", "sse", "streamable-http"),
-        default=os.getenv("HOUSECALLPRO_TRANSPORT", "sse"),
-        help="Transport protocol for MCP (default: sse)",
+        default=os.getenv("HOUSECALLPRO_TRANSPORT", "streamable-http"),
+        help="Transport protocol for MCP (default: streamable-http)",
     )
     parser.add_argument(
         "--mount-path",
         default=os.getenv("HOUSECALLPRO_MOUNT_PATH", "/mcp"),
-        help="Mount path for SSE transport (default: /mcp)",
+        help="Mount path for HTTP transports (default: /mcp)",
     )
     parser.add_argument(
         "--log-level",
