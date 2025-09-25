@@ -129,6 +129,16 @@ def _resolve_required_scopes(args: argparse.Namespace) -> list[str] | None:
     return None
 
 
+def _normalize_mount_path(raw_path: str | None) -> str:
+    path = (raw_path or "/mcp").strip()
+    if not path:
+        return "/mcp"
+    if not path.startswith("/"):
+        path = "/" + path
+    if len(path) > 1 and path.endswith("/"):
+        path = path.rstrip("/")
+    return path
+
 def build_server(
     host: str,
     port: int,
@@ -184,8 +194,13 @@ def main() -> None:
         token_verifier=token_verifier,
     )
 
+    mount_path = _normalize_mount_path(args.mount_path)
+    server.settings.mount_path = mount_path
+    server.settings.streamable_http_path = mount_path
+
     if args.transport == "sse":
-        server.run(transport="sse", mount_path=args.mount_path)
+        server.settings.sse_path = mount_path
+        server.run(transport="sse", mount_path=mount_path)
     else:
         server.run(transport=args.transport)
 
