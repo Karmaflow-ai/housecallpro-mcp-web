@@ -22,7 +22,7 @@ steps:
         --platform=managed
         --allow-unauthenticated
         --port=8080
-        --set-env-vars=HOUSECALLPRO_PORT=8080,HOUSECALLPRO_TRANSPORT=sse,HOUSECALLPRO_AUTH_ISSUER_URL=https://mcp.example.com/issuer,HOUSECALLPRO_AUTH_RESOURCE_URL=https://mcp.example.com
+        --set-env-vars=HOUSECALLPRO_PORT=8080,HOUSECALLPRO_TRANSPORT=streamable-http,HOUSECALLPRO_AUTH_ISSUER_URL=https://mcp.example.com/issuer,HOUSECALLPRO_AUTH_RESOURCE_URL=https://mcp.example.com
 
 options:
   logging: CLOUD_LOGGING_ONLY
