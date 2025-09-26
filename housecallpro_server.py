@@ -156,6 +156,7 @@ def build_server(
         warn_on_duplicate_tools=False,
         auth=auth_settings,
         token_verifier=token_verifier,
+        stateless_http=True,
     )
 
     total_tools = register_modules(server, DEFAULT_MODULES)
