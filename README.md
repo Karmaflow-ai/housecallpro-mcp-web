@@ -102,6 +102,19 @@ an env fallback API key or run the server with `--no-require-api-key-header`.
 4. Supply the Housecall Pro API key via `Authorization: Bearer <token>`.
 5. Rotate the keys regularly and store them in your platform's secret manager.
 
+### Postman MCP Requests
+Postman 11.20+ includes first-class [MCP requests](https://learning.postman.com/docs/postman-ai-developer-tools/mcp-requests/create/)
+that make it easy to exercise your tools without writing a client. To execute Housecall Pro tools:
+
+1. Run `housecallpro_server.py` locally (or deploy it) with the streamable HTTP transport enabled.
+2. In Postman, open a workspace, select **New -> MCP**, choose **HTTP**, and set the server URL to your mount path (for example `http://localhost:8000/mcp` or `https://your-domain.example/mcp`).
+3. Click **Load Methods**. When prompted, approve any consent dialog so Postman can reach the server and list the namespaced tools.
+4. Open the **Authorization** tab, pick **Bearer Token**, and paste the Housecall Pro API key you want to test with (this maps to the `Authorization: Bearer ...` header).
+5. Back on the **Methods** tab, select a tool (for example `customers.get_customers`), fill in its JSON arguments, and press **Run**.
+6. Inspect the tool response in the **Response** pane and watch the **Notifications** stream for progress, errors, or elicitation prompts. Save the request if you want to re-run it or share it with a teammate.
+
+More advanced options, such as storing secrets in environments or exporting a config for other MCP hosts, are covered in Postman's [MCP request guide](https://learning.postman.com/docs/postman-ai-developer-tools/mcp-requests/interact/) and [configuration reference](https://learning.postman.com/docs/postman-ai-developer-tools/mcp-requests/export-mcp-server-config/).
+
 ## Deployment Checklist
 1. Provision secrets (Housecall Pro API keys, optional fallback).
 2. Run `housecallpro_server.py` with the desired transport and auth metadata.
