@@ -52,7 +52,7 @@ async def make_api_request(method: str, endpoint: str, **kwargs) -> Dict[str, An
 @mcp.tool()
 async def get_customers(
     page: Optional[int] = 1,
-    per_page: Optional[int] = 20,
+    per_page: Optional[int] = 2,
     search: Optional[str] = None,
     email: Optional[str] = None,
     phone: Optional[str] = None,
@@ -70,7 +70,7 @@ async def get_customers(
     
     Args:
         page: Page number (default: 1)
-        per_page: Number of customers per page (default: 20, max: 200)
+        per_page: Number of customers per page (default: 2, max: 200)
         search: Search term for customer name, email, or phone
         email: Filter by customer email
         phone: Filter by customer phone number
