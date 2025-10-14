@@ -1,0 +1,33 @@
+steps:
+  - name: "gcr.io/cloud-builders/docker"
+    args:
+      - "build"
+      - "-t"
+      - "gcr.io/lead-enrichment-432619/housecallpro-mcp-dev:$COMMIT_SHA"
+      - "."
+
+  - name: "gcr.io/cloud-builders/docker"
+    args:
+      - "push"
+      - "gcr.io/lead-enrichment-432619/housecallpro-mcp-dev:$COMMIT_SHA"
+
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - >-
+        gcloud run deploy housecallpro-mcp-dev
+        --image=gcr.io/lead-enrichment-432619/housecallpro-mcp-dev:$COMMIT_SHA
+        --region=northamerica-northeast1
+        --platform=managed
+        --allow-unauthenticated
+        --port=8080
+        --set-env-vars=HOUSECALLPRO_PORT=8080,HOUSECALLPRO_TRANSPORT=streamable-http,HOUSECALLPRO_AUTH_ISSUER_URL=https://mcp.example.com/issuer,HOUSECALLPRO_AUTH_RESOURCE_URL=https://mcp.example.com
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+images:
+  - "gcr.io/lead-enrichment-432619/housecallpro-mcp-dev:$COMMIT_SHA"
+
+timeout: "900s"
