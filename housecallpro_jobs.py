@@ -39,22 +39,61 @@ def get_headers() -> Dict[str, str]:
 
 
 async def make_api_request(
-    method: str, endpoint: str, params: Optional[Dict] = None, json_data: Optional[Dict] = None
-) -> Dict[str, Any]:
+    method: str,
+    endpoint: str,
+    params: Optional[Dict[str, Any]] = None,
+    json_data: Optional[Any] = None,
+    data: Optional[Any] = None,
+    files: Optional[Any] = None,
+    extra_headers: Optional[Dict[str, str]] = None,
+    timeout: float = 30.0,
+) -> Any:
     """Make an authenticated API request to Housecall Pro."""
     headers = get_headers()
-    
-    async with httpx.AsyncClient() as client:
-        response = await client.request(
-            method,
-            f"{API_BASE_URL}{endpoint}",
-            headers=headers,
-            params=params,
-            json=json_data,
-            timeout=30.0,
-        )
-        response.raise_for_status()
+    if extra_headers:
+        headers.update(extra_headers)
+
+    request_kwargs: Dict[str, Any] = {
+        "headers": headers,
+        "timeout": timeout,
+    }
+    if params:
+        request_kwargs["params"] = params
+    if json_data is not None:
+        request_kwargs["json"] = json_data
+    if data is not None:
+        request_kwargs["data"] = data
+    if files is not None:
+        request_kwargs["files"] = files
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.request(
+                method,
+                f"{API_BASE_URL}{endpoint}",
+                **request_kwargs,
+            )
+            response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        error_detail: Any = None
+        if exc.response is not None:
+            try:
+                error_detail = exc.response.json()
+            except ValueError:
+                error_detail = exc.response.text
+        raise RuntimeError(
+            f"Housecall Pro API {exc.response.status_code if exc.response else 'error'} "
+            f"for {endpoint}: {error_detail}"
+        ) from exc
+
+    if not response.content:
+        return {}
+
+    content_type = response.headers.get("Content-Type", "")
+    if "application/json" in content_type:
         return response.json()
+
+    return {"raw_response": response.text}
 
 
 # Job Management Tools
