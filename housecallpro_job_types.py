@@ -23,6 +23,7 @@ mcp = FastMCP("Housecall Pro Job Types")
 # Configuration
 API_KEY = os.getenv("HOUSECALL_PRO_API_KEY")
 API_BASE_URL = "https://api.housecallpro.com"
+JOB_TYPES_BASE_ENDPOINT = "/job_fields/job_types"
 
 if not API_KEY:
     raise ValueError("HOUSECALL_PRO_API_KEY environment variable is required")
@@ -90,7 +91,7 @@ async def get_job_types(
         params["name"] = name
     
     try:
-        result = make_api_request("GET", "/job_types", params=params)
+        result = make_api_request("GET", JOB_TYPES_BASE_ENDPOINT, params=params)
         return json.dumps(result, indent=2)
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 401:
@@ -147,7 +148,7 @@ async def create_job_type(
         data["default_price"] = default_price
     
     try:
-        result = make_api_request("POST", "/job_types", json_data=data)
+        result = make_api_request("POST", JOB_TYPES_BASE_ENDPOINT, json_data=data)
         return json.dumps(result, indent=2)
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 400:
@@ -215,7 +216,7 @@ async def update_job_type(
         return "Error: No fields provided to update"
     
     try:
-        result = make_api_request("PUT", f"/job_types/{job_type_id}", json_data=data)
+        result = make_api_request("PUT", f"{JOB_TYPES_BASE_ENDPOINT}/{job_type_id}", json_data=data)
         return json.dumps(result, indent=2)
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 400:
@@ -246,7 +247,7 @@ async def get_job_type_by_id(job_type_id: str) -> str:
         JSON string containing the job type details
     """
     try:
-        result = make_api_request("GET", f"/job_types/{job_type_id}")
+        result = make_api_request("GET", f"{JOB_TYPES_BASE_ENDPOINT}/{job_type_id}")
         return json.dumps(result, indent=2)
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 404:
