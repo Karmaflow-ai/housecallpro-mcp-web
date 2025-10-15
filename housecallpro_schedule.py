@@ -7,8 +7,7 @@ including retrieving and updating schedule windows, and getting booking windows.
 """
 
 import os
-from typing import Optional, Dict, Any, List
-from datetime import datetime
+from typing import Optional, Dict, Any
 
 import httpx
 from dotenv import load_dotenv
@@ -40,44 +39,41 @@ def get_headers() -> Dict[str, str]:
 
 
 @mcp.tool()
-async def get_schedule_windows(start_date: str, end_date: str) -> Dict[str, Any]:
+async def get_schedule_windows() -> Dict[str, Any]:
     """
-    Retrieves the schedule windows for a given date range.
-
-    Args:
-        start_date: The start date in YYYY-MM-DD format.
-        end_date: The end date in YYYY-MM-DD format.
+    Retrieves the organization's configured schedule availability.
 
     Returns:
-        A dictionary containing the schedule windows.
+        A dictionary containing the schedule availability including daily windows.
     """
     headers = get_headers()
-    params = {"start_date": start_date, "end_date": end_date}
     async with httpx.AsyncClient() as client:
         response = await client.get(
-            f"{API_BASE_URL}/schedules/windows", headers=headers, params=params
+            f"{API_BASE_URL}/company/schedule_availability",
+            headers=headers,
         )
         response.raise_for_status()
         return response.json()
 
 
 @mcp.tool()
-async def update_schedule_windows(windows: List[Dict[str, str]]) -> Dict[str, Any]:
+async def update_schedule_windows(schedule_settings: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Updates the company's schedule windows.
+    Updates the company's schedule availability configuration.
 
     Args:
-        windows: A list of window dictionaries, each with 'start_time' and 'end_time'.
-                 Example: [{"start_time": "08:00", "end_time": "12:00"}]
+        schedule_settings: Complete schedule availability payload matching the Housecall
+                           Pro schema (e.g., daily_availabilities, buffers).
 
     Returns:
-        A dictionary containing the updated schedule windows.
+        A dictionary containing the updated schedule availability.
     """
     headers = get_headers()
-    json_payload = {"windows": windows}
     async with httpx.AsyncClient() as client:
         response = await client.put(
-            f"{API_BASE_URL}/schedules/windows", headers=headers, json=json_payload
+            f"{API_BASE_URL}/company/schedule_availability",
+            headers=headers,
+            json=schedule_settings,
         )
         response.raise_for_status()
         return response.json()
@@ -85,30 +81,29 @@ async def update_schedule_windows(windows: List[Dict[str, str]]) -> Dict[str, An
 
 @mcp.tool()
 async def get_booking_windows(
-    start_date: str, end_date: str, address: str, service_ids: List[str]
+    start_date: Optional[str] = None, show_for_days: Optional[int] = None
 ) -> Dict[str, Any]:
     """
-    Retrieves available booking windows based on service and location.
+    Retrieves available booking windows using configured online booking rules.
 
     Args:
-        start_date: The start date for availability search (YYYY-MM-DD).
-        end_date: The end date for availability search (YYYY-MM-DD).
-        address: The address for the job.
-        service_ids: A list of service IDs to be scheduled.
+        start_date: Optional date string (YYYY-MM-DD) indicating when to begin the search.
+        show_for_days: Optional number of days to include in the response.
 
     Returns:
         A dictionary containing available booking windows.
     """
     headers = get_headers()
-    params = {
-        "start_date": start_date,
-        "end_date": end_date,
-        "address": address,
-        "service_ids": ",".join(service_ids),
-    }
+    params: Dict[str, Any] = {}
+    if start_date:
+        params["start_date"] = start_date
+    if show_for_days is not None:
+        params["show_for_days"] = str(show_for_days)
     async with httpx.AsyncClient() as client:
         response = await client.get(
-            f"{API_BASE_URL}/schedules/booking-windows", headers=headers, params=params
+            f"{API_BASE_URL}/company/schedule_availability/booking_windows",
+            headers=headers,
+            params=params or None,
         )
         response.raise_for_status()
         return response.json()
