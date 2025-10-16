@@ -47,12 +47,66 @@ async def make_api_request(method: str, endpoint: str, **kwargs) -> Dict[str, An
         return response.json()
 
 
+def _normalize_str(value: Optional[str]) -> str:
+    """Return a case-folded trimmed string for comparison."""
+    if not isinstance(value, str):
+        return ""
+    return value.strip().casefold()
+
+
+def _normalize_phone(value: Optional[str]) -> str:
+    """Strip non-numeric characters from a phone number for comparison."""
+    if not value:
+        return ""
+    return "".join(ch for ch in str(value) if ch.isdigit())
+
+
+def _collect_customer_phone_numbers(customer: Dict[str, Any]) -> List[str]:
+    """Gather the known phone number fields from a customer payload."""
+    numbers: List[str] = []
+    for key in ("phone", "mobile_number", "home_number", "work_number", "contact_phone"):
+        value = customer.get(key)
+        if isinstance(value, str):
+            numbers.append(value)
+    for phone_entry in customer.get("phone_numbers", []) or []:
+        if isinstance(phone_entry, str):
+            numbers.append(phone_entry)
+        elif isinstance(phone_entry, dict):
+            number = phone_entry.get("number") or phone_entry.get("value")
+            if isinstance(number, str):
+                numbers.append(number)
+    return numbers
+
+
+def _extract_customers(payload: Any) -> List[Dict[str, Any]]:
+    """
+    Extract a list of customer dictionaries from an API payload.
+
+    Supports API responses that return either a list of customers or a wrapper
+    object containing a customers/data/results/items collection.
+    """
+    if isinstance(payload, list):
+        return [item for item in payload if isinstance(item, dict)]
+    if isinstance(payload, dict):
+        for key in ("customers", "data", "results", "items"):
+            value = payload.get(key)
+            if isinstance(value, list):
+                return [item for item in value if isinstance(item, dict)]
+        single_customer = payload.get("customer")
+        if isinstance(single_customer, dict):
+            return [single_customer]
+        candidate_keys = {"id", "first_name", "last_name"}
+        if any(key in payload for key in candidate_keys):
+            return [payload]
+    return []
+
+
 # CUSTOMER ENDPOINTS
 
 @mcp.tool()
 async def get_customers(
     page: Optional[int] = 1,
-    per_page: Optional[int] = 2,
+    per_page: Optional[int] = 50,
     search: Optional[str] = None,
     email: Optional[str] = None,
     phone: Optional[str] = None,
@@ -66,17 +120,21 @@ async def get_customers(
     updated_end: Optional[str] = None
 ) -> dict:
     """
-    Get a list of customers with optional filtering.
-    
+    Retrieve the best matching customer profile for the provided query details.
+
+    The tool searches Housecall Pro for customers matching the supplied filters,
+    returns the single most relevant profile, or reports that no confident match
+    could be found.
+
     Args:
-        page: Page number (default: 1)
-        per_page: Number of customers per page (default: 2, max: 200)
-        search: Search term for customer name, email, or phone
-        email: Filter by customer email
-        phone: Filter by customer phone number
-        company_name: Filter by company name
-        first_name: Filter by first name
-        last_name: Filter by last name
+        page: Page number to fetch when querying the API (default: 1)
+        per_page: Number of customers fetched per page (default: 50, max supported by API: 200)
+        search: Free-form search applied to name, email, or phone
+        email: Exact email address to match
+        phone: Phone number (any format) to match
+        company_name: Company name to match
+        first_name: Customer first name
+        last_name: Customer last name
         tags: Filter by customer tags (comma-separated)
         created_start: Filter by creation date start (ISO 8601 format)
         created_end: Filter by creation date end (ISO 8601 format)
@@ -96,13 +154,111 @@ async def get_customers(
         "created_start": created_start,
         "created_end": created_end,
         "updated_start": updated_start,
-        "updated_end": updated_end
+        "updated_end": updated_end,
     }
-    
-    # Remove None values from params
+
     clean_params = {k: v for k, v in params.items() if v is not None}
-    
-    return await make_api_request("GET", "/customers", params=clean_params)
+    if "per_page" in clean_params:
+        try:
+            clean_params["per_page"] = max(1, min(int(clean_params["per_page"]), 200))
+        except (ValueError, TypeError):
+            clean_params.pop("per_page", None)
+    if "page" in clean_params:
+        try:
+            clean_params["page"] = max(1, int(clean_params["page"]))
+        except (ValueError, TypeError):
+            clean_params.pop("page", None)
+
+    api_response = await make_api_request("GET", "/customers", params=clean_params)
+    customers = _extract_customers(api_response)
+    if not customers:
+        return {
+            "error": "Customer not found",
+            "details": {"reason": "No customers returned for supplied criteria"},
+        }
+
+    email_norm = _normalize_str(email)
+    phone_norm = _normalize_phone(phone)
+    search_norm = _normalize_str(search)
+    first_norm = _normalize_str(first_name)
+    last_norm = _normalize_str(last_name)
+    company_norm = _normalize_str(company_name)
+
+    scored_customers: List[Dict[str, Any]] = []
+    for customer in customers:
+        reasons: List[str] = []
+        score = 0
+
+        customer_email = _normalize_str(customer.get("email"))
+        if email_norm:
+            if customer_email == email_norm:
+                score += 100
+                reasons.append("Exact email match")
+            elif email_norm in customer_email and customer_email:
+                score += 30
+                reasons.append("Partial email match")
+
+        if phone_norm:
+            for candidate_phone in _collect_customer_phone_numbers(customer):
+                if _normalize_phone(candidate_phone) == phone_norm:
+                    score += 80
+                    reasons.append("Phone number match")
+                    break
+
+        if first_norm and _normalize_str(customer.get("first_name")) == first_norm:
+            score += 20
+            reasons.append("First name match")
+        if last_norm and _normalize_str(customer.get("last_name")) == last_norm:
+            score += 20
+            reasons.append("Last name match")
+        if company_norm and company_norm in _normalize_str(customer.get("company_name")):
+            score += 10
+            reasons.append("Company name match")
+
+        if search_norm:
+            search_fields = [
+                f"{customer.get('first_name', '')} {customer.get('last_name', '')}",
+                customer.get("email"),
+                customer.get("company_name"),
+            ]
+            for field in search_fields:
+                if isinstance(field, str) and search_norm in field.casefold():
+                    score += 5
+                    reasons.append("Search term match")
+                    break
+
+        if score > 0:
+            scored_customers.append(
+                {
+                    "customer": customer,
+                    "score": score,
+                    "match_reasons": sorted(set(reasons)),
+                }
+            )
+
+    if not scored_customers:
+        return {
+            "error": "Customer not found",
+            "details": {"reason": "No confident match", "customers_reviewed": len(customers)},
+        }
+
+    scored_customers.sort(key=lambda item: item["score"], reverse=True)
+    best = scored_customers[0]
+    if len(scored_customers) > 1 and scored_customers[1]["score"] == best["score"]:
+        return {
+            "error": "Customer match ambiguous",
+            "details": {
+                "reason": "Multiple customers share the top match score",
+                "top_score": best["score"],
+                "candidates_considered": len(scored_customers),
+            },
+        }
+
+    return {
+        "customer": best["customer"],
+        "match_score": best["score"],
+        "match_reasons": best["match_reasons"],
+    }
 
 
 @mcp.tool()
