@@ -8,7 +8,6 @@ including CRUD operations for employees.
 
 import os
 from typing import Optional, Dict, Any, List
-import json
 
 import httpx
 from dotenv import load_dotenv
@@ -23,6 +22,7 @@ mcp = FastMCP("Housecall Pro Employees")
 # Configuration
 API_KEY = os.getenv("HOUSECALL_PRO_API_KEY")
 API_BASE_URL = "https://api.housecallpro.com"
+EMPLOYEES_BASE_ENDPOINT = "/employees"
 
 if not API_KEY:
     raise ValueError("HOUSECALL_PRO_API_KEY environment variable is required")
@@ -41,27 +41,65 @@ async def make_api_request(
     method: str,
     endpoint: str,
     params: Optional[Dict[str, Any]] = None,
-    json_data: Optional[Dict[str, Any]] = None
+    json_data: Optional[Any] = None,
+    data: Optional[Any] = None,
+    files: Optional[Any] = None,
+    extra_headers: Optional[Dict[str, str]] = None,
+    timeout: float = 30.0,
 ) -> Dict[str, Any]:
     """Make an API request to Housecall Pro."""
-    url = f"{API_BASE_URL}{endpoint}"
-    
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.request(
-                method=method,
-                url=url,
-                headers=get_headers(),
-                params=params,
-                json=json_data,
-                timeout=30.0
-            )
+    normalized_endpoint = endpoint if endpoint.startswith("/") else f"/{endpoint}"
+    url = f"{API_BASE_URL}{normalized_endpoint}"
+    headers = get_headers()
+    if extra_headers:
+        headers.update(extra_headers)
+
+    request_kwargs: Dict[str, Any] = {
+        "headers": headers,
+        "timeout": timeout,
+    }
+    if params:
+        request_kwargs["params"] = params
+    if json_data is not None:
+        request_kwargs["json"] = json_data
+    if data is not None:
+        request_kwargs["data"] = data
+    if files is not None:
+        request_kwargs["files"] = files
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.request(method=method, url=url, **request_kwargs)
             response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        error_detail: Any = None
+        if exc.response is not None:
+            try:
+                error_detail = exc.response.json()
+            except ValueError:
+                error_detail = exc.response.text
+        return {
+            "error": "Housecall Pro API returned an error",
+            "status_code": exc.response.status_code if exc.response else None,
+            "details": error_detail,
+            "endpoint": normalized_endpoint,
+        }
+    except httpx.HTTPError as exc:
+        return {"error": f"HTTP error occurred: {str(exc)}", "endpoint": normalized_endpoint}
+    except Exception as exc:
+        return {"error": f"An unexpected error occurred: {str(exc)}", "endpoint": normalized_endpoint}
+
+    if not response.content:
+        return {}
+
+    content_type = response.headers.get("Content-Type", "")
+    if "application/json" in content_type:
+        try:
             return response.json()
-        except httpx.HTTPError as e:
-            return json.dumps({"error": f"HTTP error occurred: {str(e)}"}, indent=2)
-        except Exception as e:
-            return json.dumps({"error": f"An error occurred: {str(e)}"}, indent=2)
+        except ValueError:
+            return {"error": "Received invalid JSON from Housecall Pro", "endpoint": normalized_endpoint}
+
+    return {"raw_response": response.text, "endpoint": normalized_endpoint}
 
 # Employee Management Tools
 
@@ -120,7 +158,7 @@ async def get_employees(
     if sort_direction is not None:
         params["sort_direction"] = sort_direction
 
-    return await make_api_request("GET", "employees", params=params)
+    return await make_api_request("GET", EMPLOYEES_BASE_ENDPOINT, params=params)
 
 @mcp.tool()
 async def get_employee_by_id(
@@ -142,7 +180,7 @@ async def get_employee_by_id(
     if include_tags is not None:
         params["include_tags"] = str(include_tags).lower()
     
-    return await make_api_request("GET", f"employees/{employee_id}", params=params)
+    return await make_api_request("GET", f"{EMPLOYEES_BASE_ENDPOINT}/{employee_id}", params=params)
 
 @mcp.tool()
 async def search_employees(
@@ -177,7 +215,7 @@ async def search_employees(
     if include_tags is not None:
         params["include_tags"] = str(include_tags).lower()
 
-    return await make_api_request("GET", "employees", params=params)
+    return await make_api_request("GET", EMPLOYEES_BASE_ENDPOINT, params=params)
 
 @mcp.tool()
 async def get_employees_by_role(
@@ -208,7 +246,7 @@ async def get_employees_by_role(
     if page_size is not None:
         params["page_size"] = min(page_size, 100)
 
-    return await make_api_request("GET", "employees", params=params)
+    return await make_api_request("GET", EMPLOYEES_BASE_ENDPOINT, params=params)
 
 @mcp.tool()
 async def get_active_employees(
@@ -245,7 +283,7 @@ async def get_active_employees(
     if sort_direction is not None:
         params["sort_direction"] = sort_direction
 
-    return await make_api_request("GET", "employees", params=params)
+    return await make_api_request("GET", EMPLOYEES_BASE_ENDPOINT, params=params)
 
 @mcp.tool()
 async def get_mobile_employees(
@@ -274,7 +312,7 @@ async def get_mobile_employees(
     if page_size is not None:
         params["page_size"] = min(page_size, 100)
 
-    return await make_api_request("GET", "employees", params=params)
+    return await make_api_request("GET", EMPLOYEES_BASE_ENDPOINT, params=params)
 
 @mcp.tool()
 async def summarize_employees() -> str:
@@ -287,7 +325,7 @@ async def summarize_employees() -> str:
     
     try:
         # Get all employees with minimal pagination
-        response = await make_api_request("GET", "employees", params={"page_size": 100})
+        response = await make_api_request("GET", EMPLOYEES_BASE_ENDPOINT, params={"page_size": 100})
         
         if "error" in response:
             return f"Error fetching employees: {response.get('message', 'Unknown error')}"
