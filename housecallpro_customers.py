@@ -107,7 +107,6 @@ def _extract_customers(payload: Any) -> List[Dict[str, Any]]:
 async def get_customers(
     page: Optional[int] = 1,
     per_page: Optional[int] = 50,
-    search: Optional[str] = None,
     email: Optional[str] = None,
     phone: Optional[str] = None,
     company_name: Optional[str] = None,
@@ -129,7 +128,6 @@ async def get_customers(
     Args:
         page: Page number to fetch when querying the API (default: 1)
         per_page: Number of customers fetched per page (default: 50, max supported by API: 200)
-        search: Free-form search applied to name, email, or phone
         email: Exact email address to match
         phone: Phone number (any format) to match
         company_name: Company name to match
@@ -144,7 +142,6 @@ async def get_customers(
     params = {
         "page": page,
         "per_page": per_page,
-        "search": search,
         "email": email,
         "phone": phone,
         "company_name": company_name,
@@ -179,7 +176,6 @@ async def get_customers(
 
     email_norm = _normalize_str(email)
     phone_norm = _normalize_phone(phone)
-    search_norm = _normalize_str(search)
     first_norm = _normalize_str(first_name)
     last_norm = _normalize_str(last_name)
     company_norm = _normalize_str(company_name)
@@ -214,18 +210,6 @@ async def get_customers(
         if company_norm and company_norm in _normalize_str(customer.get("company_name")):
             score += 10
             reasons.append("Company name match")
-
-        if search_norm:
-            search_fields = [
-                f"{customer.get('first_name', '')} {customer.get('last_name', '')}",
-                customer.get("email"),
-                customer.get("company_name"),
-            ]
-            for field in search_fields:
-                if isinstance(field, str) and search_norm in field.casefold():
-                    score += 5
-                    reasons.append("Search term match")
-                    break
 
         if score > 0:
             scored_customers.append(
