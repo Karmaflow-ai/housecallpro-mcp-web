@@ -58,7 +58,11 @@ def _normalize_phone(value: Optional[str]) -> str:
     """Strip non-numeric characters from a phone number for comparison."""
     if not value:
         return ""
-    return "".join(ch for ch in str(value) if ch.isdigit())
+    digits = "".join(ch for ch in str(value) if ch.isdigit())
+    if len(digits) >= 10:
+        # Compare on the last 10 digits to ignore country codes or extensions.
+        return digits[-10:]
+    return digits
 
 
 def _collect_customer_phone_numbers(customer: Dict[str, Any]) -> List[str]:
