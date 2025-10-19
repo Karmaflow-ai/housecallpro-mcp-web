@@ -127,32 +127,37 @@ def _generate_phone_variants(phone: Optional[str]) -> List[str]:
 
 def _collect_customer_phone_numbers(customer: Dict[str, Any]) -> List[str]:
     """Gather the known phone number fields from a customer payload."""
-    numbers: List[str] = []
-    for key in ("phone", "mobile_number", "home_number", "work_number", "contact_phone"):
-        value = customer.get(key)
-        if isinstance(value, str):
-            numbers.append(value)
-    phone_numbers = customer.get("phone_numbers")
-    if isinstance(phone_numbers, dict):
-        iterable = phone_numbers.values()
-    elif isinstance(phone_numbers, list):
-        iterable = phone_numbers
-    else:
-        iterable = []
 
-    for phone_entry in iterable:
-        if isinstance(phone_entry, str):
-            numbers.append(phone_entry)
-        elif isinstance(phone_entry, dict):
-            number = (
-                phone_entry.get("number")
-                or phone_entry.get("value")
-                or phone_entry.get("phone")
-                or phone_entry.get("phone_number")
-            )
-            if isinstance(number, str):
-                numbers.append(number)
-    return numbers
+    def collect(value: Any, results: set[str]) -> None:
+        if isinstance(value, str):
+            if _normalize_phone(value):
+                results.add(value)
+        elif isinstance(value, dict):
+            for nested in value.values():
+                collect(nested, results)
+        elif isinstance(value, (list, tuple, set)):
+            for item in value:
+                collect(item, results)
+
+    candidates: set[str] = set()
+    keys_to_check = (
+        "phone",
+        "mobile_number",
+        "home_number",
+        "work_number",
+        "contact_phone",
+        "primary_phone",
+        "primary_phone_number",
+        "primary_phone_display",
+    )
+    for key in keys_to_check:
+        collect(customer.get(key), candidates)
+
+    collect(customer.get("phone_numbers"), candidates)
+    collect(customer.get("phones"), candidates)
+    collect(customer.get("contact"), candidates)
+
+    return list(candidates)
 
 
 def _extract_customers(payload: Any) -> List[Dict[str, Any]]:
