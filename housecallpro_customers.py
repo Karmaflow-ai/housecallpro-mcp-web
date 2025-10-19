@@ -82,6 +82,49 @@ def _phones_match(query_digits: str, candidate_digits: str) -> bool:
     return False
 
 
+def _generate_phone_variants(phone: Optional[str]) -> List[str]:
+    """Produce likely phone number formats to query when searching by phone."""
+    variants: List[str] = []
+    seen: set[str] = set()
+
+    def add(value: Optional[str]) -> None:
+        if not isinstance(value, str):
+            return
+        candidate = value.strip()
+        if not candidate or candidate in seen:
+            return
+        variants.append(candidate)
+        seen.add(candidate)
+
+    add(phone)
+
+    digits = _normalize_phone(phone)
+    if digits:
+        add(digits)
+        if len(digits) > 10:
+            add(digits[-10:])
+        last10 = digits[-10:] if len(digits) >= 10 else digits
+        if last10:
+            add(last10)
+            if len(last10) == 10:
+                area, prefix, line = last10[:3], last10[3:6], last10[6:]
+                add(f"({area}) {prefix}-{line}")
+                add(f"({area}){prefix}-{line}")
+                add(f"{area}-{prefix}-{line}")
+                add(f"{area} {prefix} {line}")
+                add(f"{area}{prefix}{line}")
+                add(f"1{last10}")
+                add(f"1-{area}-{prefix}-{line}")
+                add(f"+1{last10}")
+                add(f"+1 {area}-{prefix}-{line}")
+                add(f"+1 ({area}) {prefix}-{line}")
+        country_code = digits[:-len(last10)] if digits and last10 and len(digits) > len(last10) else ""
+        if country_code:
+            add(f"+{country_code}{last10}")
+            add(f"+{country_code} {last10}")
+    return variants
+
+
 def _collect_customer_phone_numbers(customer: Dict[str, Any]) -> List[str]:
     """Gather the known phone number fields from a customer payload."""
     numbers: List[str] = []
@@ -89,11 +132,24 @@ def _collect_customer_phone_numbers(customer: Dict[str, Any]) -> List[str]:
         value = customer.get(key)
         if isinstance(value, str):
             numbers.append(value)
-    for phone_entry in customer.get("phone_numbers", []) or []:
+    phone_numbers = customer.get("phone_numbers")
+    if isinstance(phone_numbers, dict):
+        iterable = phone_numbers.values()
+    elif isinstance(phone_numbers, list):
+        iterable = phone_numbers
+    else:
+        iterable = []
+
+    for phone_entry in iterable:
         if isinstance(phone_entry, str):
             numbers.append(phone_entry)
         elif isinstance(phone_entry, dict):
-            number = phone_entry.get("number") or phone_entry.get("value")
+            number = (
+                phone_entry.get("number")
+                or phone_entry.get("value")
+                or phone_entry.get("phone")
+                or phone_entry.get("phone_number")
+            )
             if isinstance(number, str):
                 numbers.append(number)
     return numbers
@@ -187,84 +243,134 @@ async def get_customers(
         except (ValueError, TypeError):
             clean_params.pop("page", None)
 
-    api_response = await make_api_request("GET", "/customers", params=clean_params)
-    customers = _extract_customers(api_response)
-    if not customers:
-        return {
-            "error": "Customer not found",
-            "details": {"reason": "No customers returned for supplied criteria"},
-        }
-
     email_norm = _normalize_str(email)
     phone_digits = _normalize_phone(phone)
     first_norm = _normalize_str(first_name)
     last_norm = _normalize_str(last_name)
     company_norm = _normalize_str(company_name)
 
-    scored_customers: List[Dict[str, Any]] = []
-    for customer in customers:
-        reasons: List[str] = []
-        score = 0
+    base_params = dict(clean_params)
+    phone_variants: List[Optional[str]]
+    if "phone" in base_params:
+        original_phone_value = base_params.pop("phone")
+        original_phone_str = "" if original_phone_value is None else str(original_phone_value)
+        generated_variants = _generate_phone_variants(original_phone_str)
+        phone_variants = generated_variants or [original_phone_str]
+    else:
+        phone_variants = [None]
+    phone_variants = [variant for variant in phone_variants if variant]
+    if not phone_variants:
+        phone_variants = [None]
 
-        customer_email = _normalize_str(customer.get("email"))
-        if email_norm:
-            if customer_email == email_norm:
-                score += 100
-                reasons.append("Exact email match")
-            elif email_norm in customer_email and customer_email:
-                score += 30
-                reasons.append("Partial email match")
+    search_attempts: List[Dict[str, Any]] = []
+    total_reviewed = 0
+    ambiguous_record: Optional[Dict[str, Any]] = None
 
-        if phone_digits:
-            for candidate_phone in _collect_customer_phone_numbers(customer):
-                candidate_digits = _normalize_phone(candidate_phone)
-                if _phones_match(phone_digits, candidate_digits):
-                    score += 80
-                    reasons.append("Phone number match")
-                    break
+    for variant in phone_variants:
+        query_params = dict(base_params)
+        if variant is not None:
+            query_params["phone"] = variant
 
-        if first_norm and _normalize_str(customer.get("first_name")) == first_norm:
-            score += 20
-            reasons.append("First name match")
-        if last_norm and _normalize_str(customer.get("last_name")) == last_norm:
-            score += 20
-            reasons.append("Last name match")
-        if company_norm and company_norm in _normalize_str(customer.get("company_name")):
-            score += 10
-            reasons.append("Company name match")
+        api_response = await make_api_request("GET", "/customers", params=query_params)
+        customers = _extract_customers(api_response)
+        total_reviewed += len(customers)
 
-        if score > 0:
-            scored_customers.append(
-                {
-                    "customer": customer,
-                    "score": score,
-                    "match_reasons": sorted(set(reasons)),
-                }
-            )
-
-    if not scored_customers:
-        return {
-            "error": "Customer not found",
-            "details": {"reason": "No confident match", "customers_reviewed": len(customers)},
+        attempt_summary: Dict[str, Any] = {
+            "phone_query": variant,
+            "results": len(customers),
         }
+        search_attempts.append(attempt_summary)
 
-    scored_customers.sort(key=lambda item: item["score"], reverse=True)
-    best = scored_customers[0]
-    if len(scored_customers) > 1 and scored_customers[1]["score"] == best["score"]:
+        if not customers:
+            continue
+
+        scored_customers: List[Dict[str, Any]] = []
+        for customer in customers:
+            reasons: List[str] = []
+            score = 0
+
+            customer_email = _normalize_str(customer.get("email"))
+            if email_norm:
+                if customer_email == email_norm:
+                    score += 100
+                    reasons.append("Exact email match")
+                elif email_norm in customer_email and customer_email:
+                    score += 30
+                    reasons.append("Partial email match")
+
+            if phone_digits:
+                for candidate_phone in _collect_customer_phone_numbers(customer):
+                    candidate_digits = _normalize_phone(candidate_phone)
+                    if _phones_match(phone_digits, candidate_digits):
+                        score += 80
+                        reasons.append("Phone number match")
+                        break
+
+            if first_norm and _normalize_str(customer.get("first_name")) == first_norm:
+                score += 20
+                reasons.append("First name match")
+            if last_norm and _normalize_str(customer.get("last_name")) == last_norm:
+                score += 20
+                reasons.append("Last name match")
+            if company_norm and company_norm in _normalize_str(customer.get("company_name")):
+                score += 10
+                reasons.append("Company name match")
+
+            if score > 0:
+                scored_customers.append(
+                    {
+                        "customer": customer,
+                        "score": score,
+                        "match_reasons": sorted(set(reasons)),
+                    }
+                )
+
+        if not scored_customers:
+            continue
+
+        scored_customers.sort(key=lambda item: item["score"], reverse=True)
+        best = scored_customers[0]
+        if len(scored_customers) > 1 and scored_customers[1]["score"] == best["score"]:
+            attempt_summary["top_score"] = best["score"]
+            attempt_summary["ambiguous_candidates"] = len(scored_customers)
+            if (ambiguous_record is None) or (best["score"] > ambiguous_record.get("score", 0)):
+                ambiguous_record = {
+                    "score": best["score"],
+                    "candidates": len(scored_customers),
+                }
+            continue
+
+        result: Dict[str, Any] = {
+            "customer": best["customer"],
+            "match_score": best["score"],
+            "match_reasons": best["match_reasons"],
+        }
+        if len(search_attempts) > 1:
+            result["phone_search_attempts"] = search_attempts
+        return result
+
+    if ambiguous_record:
+        details: Dict[str, Any] = {
+            "reason": "Multiple customers share the top match score",
+            "top_score": ambiguous_record["score"],
+            "candidates_considered": ambiguous_record["candidates"],
+        }
+        if len(search_attempts) > 1:
+            details["phone_search_attempts"] = search_attempts
         return {
             "error": "Customer match ambiguous",
-            "details": {
-                "reason": "Multiple customers share the top match score",
-                "top_score": best["score"],
-                "candidates_considered": len(scored_customers),
-            },
+            "details": details,
         }
 
-    return {
-        "customer": best["customer"],
-        "match_score": best["score"],
-        "match_reasons": best["match_reasons"],
-    }
+    details: Dict[str, Any] = {}
+    if total_reviewed:
+        details["reason"] = "No confident match"
+        details["customers_reviewed"] = total_reviewed
+    else:
+        details["reason"] = "No customers returned for supplied criteria"
+    if len(search_attempts) > 1:
+        details["phone_search_attempts"] = search_attempts
+    return {"error": "Customer not found", "details": details}
 
 
 @mcp.tool()
