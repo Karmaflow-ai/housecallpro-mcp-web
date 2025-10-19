@@ -58,11 +58,28 @@ def _normalize_phone(value: Optional[str]) -> str:
     """Strip non-numeric characters from a phone number for comparison."""
     if not value:
         return ""
-    digits = "".join(ch for ch in str(value) if ch.isdigit())
-    if len(digits) >= 10:
-        # Compare on the last 10 digits to ignore country codes or extensions.
-        return digits[-10:]
-    return digits
+    return "".join(ch for ch in str(value) if ch.isdigit())
+
+
+def _phones_match(query_digits: str, candidate_digits: str) -> bool:
+    """
+    Determine whether two phone numbers match, ignoring leading country codes
+    or trailing extensions. We compare using digit-only strings so formats
+    like '+1 (555) 123-4567 ext. 42' still align with '5551234567'.
+    """
+    if not query_digits or not candidate_digits:
+        return False
+    if query_digits == candidate_digits:
+        return True
+    if len(candidate_digits) >= len(query_digits) and candidate_digits.endswith(query_digits):
+        return True
+    if len(query_digits) >= len(candidate_digits) and query_digits.endswith(candidate_digits):
+        return True
+    if len(query_digits) >= 10 and query_digits in candidate_digits:
+        return True
+    if len(candidate_digits) >= 10 and candidate_digits in query_digits:
+        return True
+    return False
 
 
 def _collect_customer_phone_numbers(customer: Dict[str, Any]) -> List[str]:
@@ -179,7 +196,7 @@ async def get_customers(
         }
 
     email_norm = _normalize_str(email)
-    phone_norm = _normalize_phone(phone)
+    phone_digits = _normalize_phone(phone)
     first_norm = _normalize_str(first_name)
     last_norm = _normalize_str(last_name)
     company_norm = _normalize_str(company_name)
@@ -198,9 +215,10 @@ async def get_customers(
                 score += 30
                 reasons.append("Partial email match")
 
-        if phone_norm:
+        if phone_digits:
             for candidate_phone in _collect_customer_phone_numbers(customer):
-                if _normalize_phone(candidate_phone) == phone_norm:
+                candidate_digits = _normalize_phone(candidate_phone)
+                if _phones_match(phone_digits, candidate_digits):
                     score += 80
                     reasons.append("Phone number match")
                     break
