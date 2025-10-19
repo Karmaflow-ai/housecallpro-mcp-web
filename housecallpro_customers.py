@@ -26,6 +26,7 @@ API_BASE_URL = "https://api.housecallpro.com"
 if not API_KEY:
     raise ValueError("HOUSECALL_PRO_API_KEY environment variable is required")
 
+PHONE_MIN_DIGITS = 7
 
 def get_headers() -> Dict[str, str]:
     """Get headers for API requests."""
@@ -147,11 +148,11 @@ def _collect_customer_phone_numbers(customer: Dict[str, Any]) -> List[str]:
             return
         if isinstance(value, str):
             digits = _normalize_phone(value)
-            if len(digits) >= 4:
+            if len(digits) >= PHONE_MIN_DIGITS:
                 results.add(digits)
         elif isinstance(value, (int, float)):
             digits = _normalize_phone(str(value))
-            if len(digits) >= 4:
+            if len(digits) >= PHONE_MIN_DIGITS:
                 results.add(digits)
         elif isinstance(value, dict):
             for nested in value.values():
@@ -296,6 +297,8 @@ async def get_customers(
     ambiguous_record: Optional[Dict[str, Any]] = None
     best_partial_info: Optional[Dict[str, Any]] = None
     first_customer_result: Optional[Dict[str, Any]] = None
+    closest_candidate_details: Optional[Dict[str, Any]] = None
+    fallback_overlap_required = min(len(phone_digits), PHONE_MIN_DIGITS) if phone_digits else 0
 
     for variant in phone_variants:
         query_params = dict(base_params)
@@ -440,34 +443,58 @@ async def get_customers(
             "details": details,
         }
 
-    if best_partial_info and phone is not None:
-        similarity = best_partial_info.get("similarity", 0)
+    if best_partial_info:
+        similarity = int(best_partial_info.get("similarity", 0) or 0)
         fallback_customer = best_partial_info["customer"]
-        fallback_reasons = ["Phone search fallback (low confidence)"]
-        if similarity > 0:
-            fallback_reasons.append(f"Shares last {similarity} trailing digits with query")
-        elif best_partial_info.get("numbers"):
-            fallback_reasons.append("Phone digits returned but no overlapping segment detected")
-        else:
-            fallback_reasons.append("API did not expose phone digits for matching")
+        candidate_numbers = best_partial_info.get("numbers") or []
+        variant_used = best_partial_info.get("variant")
 
-        result: Dict[str, Any] = {
-            "customer": fallback_customer,
-            "match_score": similarity * 5,
-            "match_reasons": fallback_reasons,
-            "confidence": "low",
-            "customers_reviewed": total_reviewed,
-        }
-        if search_attempts:
-            result["phone_search_attempts"] = search_attempts
-        result["fallback_details"] = {
-            "phone_query_used": best_partial_info.get("variant"),
-            "phone_digits_considered": best_partial_info.get("numbers"),
-            "similarity_digits": similarity,
-        }
-        return result
+        name_parts = [
+            str(fallback_customer.get("first_name", "")).strip(),
+            str(fallback_customer.get("last_name", "")).strip(),
+        ]
+        customer_name = " ".join(part for part in name_parts if part)
 
-    if first_customer_result and phone is not None:
+        closest_candidate_details = {
+            "customer_id": fallback_customer.get("id"),
+            "customer_name": customer_name or None,
+            "phone_digits_overlap": similarity,
+            "phone_numbers_sample": candidate_numbers,
+            "phone_query_used": variant_used,
+            "required_overlap_for_fallback": fallback_overlap_required,
+        }
+        if closest_candidate_details["customer_name"] is None:
+            closest_candidate_details.pop("customer_name", None)
+
+        if (
+            phone is not None
+            and phone_digits
+            and fallback_overlap_required > 0
+            and similarity >= fallback_overlap_required
+        ):
+            fallback_reasons = [
+                "Phone search fallback (low confidence)",
+                f"Shares last {similarity} trailing digits with query",
+            ]
+
+            result: Dict[str, Any] = {
+                "customer": fallback_customer,
+                "match_score": similarity * 5,
+                "match_reasons": fallback_reasons,
+                "confidence": "low",
+                "customers_reviewed": total_reviewed,
+            }
+            if search_attempts:
+                result["phone_search_attempts"] = search_attempts
+            result["fallback_details"] = {
+                "phone_query_used": variant_used,
+                "phone_digits_considered": candidate_numbers,
+                "similarity_digits": similarity,
+                "required_overlap": fallback_overlap_required,
+            }
+            return result
+
+    if first_customer_result and (not phone_digits):
         fallback_customer = first_customer_result["customer"]
         fallback_reasons = [
             "Phone search fallback (API returned results without usable phone digits)"
@@ -495,6 +522,8 @@ async def get_customers(
         details["reason"] = "No customers returned for supplied criteria"
     if search_attempts:
         details["phone_search_attempts"] = search_attempts
+    if closest_candidate_details:
+        details["closest_candidate"] = closest_candidate_details
     return {"error": "Customer not found", "details": details}
 
 
