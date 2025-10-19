@@ -26,12 +26,6 @@ API_BASE_URL = "https://api.housecallpro.com"
 if not API_KEY:
     raise ValueError("HOUSECALL_PRO_API_KEY environment variable is required")
 
-PHONE_MIN_DIGITS = 7
-try:
-    MAX_PHONE_SEARCH_PAGES = max(1, int(os.getenv("HOUSECALL_PRO_PHONE_SEARCH_PAGES", "5")))
-except (TypeError, ValueError):
-    MAX_PHONE_SEARCH_PAGES = 5
-
 def get_headers() -> Dict[str, str]:
     """Get headers for API requests."""
     return {
@@ -66,125 +60,31 @@ def _normalize_phone(value: Optional[str]) -> str:
     return "".join(ch for ch in str(value) if ch.isdigit())
 
 
-def _phones_match(query_digits: str, candidate_digits: str) -> bool:
-    """
-    Determine whether two phone numbers match, ignoring leading country codes
-    or trailing extensions. We compare using digit-only strings so formats
-    like '+1 (555) 123-4567 ext. 42' still align with '5551234567'.
-    """
-    if not query_digits or not candidate_digits:
-        return False
-    if query_digits == candidate_digits:
-        return True
-    if len(candidate_digits) >= len(query_digits) and candidate_digits.endswith(query_digits):
-        return True
-    if len(query_digits) >= len(candidate_digits) and query_digits.endswith(candidate_digits):
-        return True
-    if len(query_digits) >= 10 and query_digits in candidate_digits:
-        return True
-    if len(candidate_digits) >= 10 and candidate_digits in query_digits:
-        return True
-    return False
-
-
-def _phone_suffix_overlap(query_digits: str, candidate_digits: str) -> int:
-    """Return the number of trailing digits shared between two phone numbers."""
-    if not query_digits or not candidate_digits:
-        return 0
-    max_len = min(len(query_digits), len(candidate_digits))
-    overlap = 0
-    for i in range(1, max_len + 1):
-        if query_digits[-i:] == candidate_digits[-i:]:
-            overlap = i
-        else:
-            break
-    return overlap
-
-
-def _generate_phone_variants(phone: Optional[str]) -> List[str]:
-    """Produce likely phone number formats to query when searching by phone."""
-    variants: List[str] = []
-    seen: set[str] = set()
-
-    def add(value: Optional[str]) -> None:
-        if not isinstance(value, str):
-            return
-        candidate = value.strip()
-        if not candidate or candidate in seen:
-            return
-        variants.append(candidate)
-        seen.add(candidate)
-
-    add(phone)
-
-    digits = _normalize_phone(phone)
-    if digits:
-        add(digits)
-        if len(digits) > 10:
-            add(digits[-10:])
-        last10 = digits[-10:] if len(digits) >= 10 else digits
-        if last10:
-            add(last10)
-            if len(last10) == 10:
-                area, prefix, line = last10[:3], last10[3:6], last10[6:]
-                add(f"({area}) {prefix}-{line}")
-                add(f"({area}){prefix}-{line}")
-                add(f"{area}-{prefix}-{line}")
-                add(f"{area} {prefix} {line}")
-                add(f"{area}{prefix}{line}")
-                add(f"1{last10}")
-                add(f"1-{area}-{prefix}-{line}")
-                add(f"+1{last10}")
-                add(f"+1 {area}-{prefix}-{line}")
-                add(f"+1 ({area}) {prefix}-{line}")
-        country_code = digits[:-len(last10)] if digits and last10 and len(digits) > len(last10) else ""
-        if country_code:
-            add(f"+{country_code}{last10}")
-            add(f"+{country_code} {last10}")
-    return variants
 
 
 def _collect_customer_phone_numbers(customer: Dict[str, Any]) -> List[str]:
-    """Gather normalized phone numbers detected within a customer payload."""
-
-    def collect(value: Any, results: set[str]) -> None:
-        if value is None:
-            return
+    """Gather the known phone number fields from a customer payload."""
+    numbers: List[str] = []
+    for key in ("phone", "mobile_number", "home_number", "work_number", "contact_phone"):
+        value = customer.get(key)
         if isinstance(value, str):
-            digits = _normalize_phone(value)
-            if PHONE_MIN_DIGITS <= len(digits) <= 16:
-                results.add(digits)
-        elif isinstance(value, (int, float)):
-            digits = _normalize_phone(str(value))
-            if PHONE_MIN_DIGITS <= len(digits) <= 16:
-                results.add(digits)
-        elif isinstance(value, dict):
-            for nested in value.values():
-                collect(nested, results)
-        elif isinstance(value, (list, tuple, set)):
-            for item in value:
-                collect(item, results)
+            numbers.append(value)
+    phone_numbers = customer.get("phone_numbers")
+    if isinstance(phone_numbers, dict):
+        iterable = phone_numbers.values()
+    elif isinstance(phone_numbers, list):
+        iterable = phone_numbers
+    else:
+        iterable = []
 
-    candidates: set[str] = set()
-    collections_to_check = (
-        "phone",
-        "mobile_number",
-        "home_number",
-        "work_number",
-        "contact_phone",
-        "primary_phone",
-        "primary_phone_number",
-        "primary_phone_display",
-        "phone_numbers",
-        "phones",
-        "contact",
-        "primary_contact",
-        "secondary_contact",
-    )
-    for key in collections_to_check:
-        collect(customer.get(key), candidates)
-
-    return list(candidates)
+    for phone_entry in iterable:
+        if isinstance(phone_entry, str):
+            numbers.append(phone_entry)
+        elif isinstance(phone_entry, dict):
+            number = phone_entry.get("number") or phone_entry.get("value")
+            if isinstance(number, str):
+                numbers.append(number)
+    return numbers
 
 
 def _extract_customers(payload: Any) -> List[Dict[str, Any]]:
@@ -275,318 +175,92 @@ async def get_customers(
         except (ValueError, TypeError):
             clean_params.pop("page", None)
 
+    if phone:
+        clean_params.setdefault("q", str(phone).strip())
+
+    api_response = await make_api_request("GET", "/customers", params=clean_params)
+    customers = _extract_customers(api_response)
+    if not customers:
+        return {
+            "error": "Customer not found",
+            "details": {"reason": "No customers returned for supplied criteria"},
+        }
+
     email_norm = _normalize_str(email)
-    phone_digits = _normalize_phone(phone)
+    phone_norm = _normalize_phone(phone)
     first_norm = _normalize_str(first_name)
     last_norm = _normalize_str(last_name)
     company_norm = _normalize_str(company_name)
 
-    base_params = dict(clean_params)
-    phone_variants: List[Optional[str]]
-    if "phone" in base_params:
-        original_phone_value = base_params.pop("phone")
-        original_phone_str = "" if original_phone_value is None else str(original_phone_value)
-        generated_variants = _generate_phone_variants(original_phone_str)
-        phone_variants = generated_variants or [original_phone_str]
-    else:
-        phone_variants = [None]
-    phone_variants = [variant for variant in phone_variants if variant]
-    if not phone_variants:
-        phone_variants = [None]
+    email_norm = _normalize_str(email)
+    phone_norm = _normalize_phone(phone)
+    first_norm = _normalize_str(first_name)
+    last_norm = _normalize_str(last_name)
+    company_norm = _normalize_str(company_name)
 
-    detail_cache: Dict[str, Optional[Dict[str, Any]]] = {}
+    scored_customers: List[Dict[str, Any]] = []
+    for customer in customers:
+        reasons: List[str] = []
+        score = 0
 
-    async def fetch_customer_details(customer_id: Optional[str]) -> Optional[Dict[str, Any]]:
-        if not isinstance(customer_id, str):
-            return None
-        cid = customer_id.strip()
-        if not cid:
-            return None
-        if cid in detail_cache:
-            return detail_cache[cid]
-        try:
-            detail = await make_api_request("GET", f"/customers/{cid}")
-        except httpx.HTTPStatusError:
-            detail_cache[cid] = None
-            return None
-        if isinstance(detail, dict):
-            detail_cache[cid] = detail
-            return detail
-        detail_cache[cid] = None
-        return None
+        customer_email = _normalize_str(customer.get("email"))
+        if email_norm:
+            if customer_email == email_norm:
+                score += 100
+                reasons.append("Exact email match")
+            elif email_norm in customer_email and customer_email:
+                score += 30
+                reasons.append("Partial email match")
 
-    search_attempts: List[Dict[str, Any]] = []
-    total_reviewed = 0
-    ambiguous_record: Optional[Dict[str, Any]] = None
-    best_partial_info: Optional[Dict[str, Any]] = None
-    first_customer_result: Optional[Dict[str, Any]] = None
-    closest_candidate_details: Optional[Dict[str, Any]] = None
-    fallback_overlap_required = min(len(phone_digits), PHONE_MIN_DIGITS) if phone_digits else 0
+        if phone_norm:
+            for candidate_phone in _collect_customer_phone_numbers(customer):
+                if _normalize_phone(candidate_phone) == phone_norm:
+                    score += 80
+                    reasons.append("Phone number match")
+                    break
 
-    start_page = int(base_params.get("page", 1) or 1)
-    per_page_value = int(base_params.get("per_page", 50) or 50)
-    per_page_value = max(1, min(per_page_value, 200))
-    max_pages_to_scan = MAX_PHONE_SEARCH_PAGES if phone_digits else max(1, min(3, MAX_PHONE_SEARCH_PAGES))
+        if first_norm and _normalize_str(customer.get("first_name")) == first_norm:
+            score += 20
+            reasons.append("First name match")
+        if last_norm and _normalize_str(customer.get("last_name")) == last_norm:
+            score += 20
+            reasons.append("Last name match")
+        if company_norm and company_norm in _normalize_str(customer.get("company_name")):
+            score += 10
+            reasons.append("Company name match")
 
-    for variant in phone_variants:
-        attempt_summary: Dict[str, Any] = {
-            "phone_query": variant,
-            "results": 0,
-        }
-        search_attempts.append(attempt_summary)
-
-        page_number = start_page
-        pages_checked = 0
-        attempt_numbers_sample: List[str] = []
-        attempt_numbers_seen: set[str] = set()
-        all_scored_customers: List[Dict[str, Any]] = []
-
-        while pages_checked < max_pages_to_scan:
-            query_params = dict(base_params)
-            query_params["page"] = page_number
-            if variant is not None:
-                query_params["phone"] = variant
-
-            api_response = await make_api_request("GET", "/customers", params=query_params)
-            customers = _extract_customers(api_response)
-            pages_checked += 1
-            attempt_summary["pages_checked"] = pages_checked
-
-            if not customers:
-                break
-
-            total_reviewed += len(customers)
-            attempt_summary["results"] += len(customers)
-
-            if first_customer_result is None:
-                first_customer_result = {
-                    "customer": customers[0],
-                    "phone_query": variant,
-                    "results": len(customers),
+        if score > 0:
+            scored_customers.append(
+                {
+                    "customer": customer,
+                    "score": score,
+                    "match_reasons": sorted(set(reasons)),
                 }
+            )
 
-            for customer in customers:
-                reasons: List[str] = []
-                score = 0
-
-                customer_email = _normalize_str(customer.get("email"))
-                if email_norm:
-                    if customer_email == email_norm:
-                        score += 100
-                        reasons.append("Exact email match")
-                    elif email_norm in customer_email and customer_email:
-                        score += 30
-                        reasons.append("Partial email match")
-
-                customer_numbers = list(dict.fromkeys(_collect_customer_phone_numbers(customer)))
-
-                if phone_digits:
-                    needs_detail = not customer_numbers or not any(
-                        _phones_match(phone_digits, digits) for digits in customer_numbers
-                    )
-                else:
-                    needs_detail = False
-
-                if needs_detail:
-                    detail = await fetch_customer_details(customer.get("id"))
-                    if detail:
-                        merged_customer = dict(customer)
-                        merged_customer.update(detail)
-                        customer = merged_customer
-                        detail_numbers = _collect_customer_phone_numbers(detail)
-                        for digits in detail_numbers:
-                            if digits and digits not in customer_numbers:
-                                customer_numbers.append(digits)
-                        customer_numbers = list(dict.fromkeys(customer_numbers))
-
-                for digits in customer_numbers:
-                    if (
-                        digits
-                        and digits not in attempt_numbers_seen
-                        and len(attempt_numbers_sample) < 10
-                    ):
-                        attempt_numbers_seen.add(digits)
-                        attempt_numbers_sample.append(digits)
-
-                if phone_digits:
-                    for candidate_digits in customer_numbers:
-                        if _phones_match(phone_digits, candidate_digits):
-                            score += 80
-                            reasons.append("Phone number match")
-                            break
-
-                if first_norm and _normalize_str(customer.get("first_name")) == first_norm:
-                    score += 20
-                    reasons.append("First name match")
-                if last_norm and _normalize_str(customer.get("last_name")) == last_norm:
-                    score += 20
-                    reasons.append("Last name match")
-                if company_norm and company_norm in _normalize_str(customer.get("company_name")):
-                    score += 10
-                    reasons.append("Company name match")
-
-                if phone_digits:
-                    if customer_numbers:
-                        similarity = max(
-                            (_phone_suffix_overlap(phone_digits, digits) for digits in customer_numbers),
-                            default=0,
-                        )
-                    else:
-                        similarity = -1
-                else:
-                    similarity = 0 if customer_numbers else -1
-
-                if similarity >= 0:
-                    if (
-                        best_partial_info is None
-                        or similarity > best_partial_info.get("similarity", -1)
-                    ):
-                        best_partial_info = {
-                            "customer": customer,
-                            "similarity": similarity,
-                            "variant": variant,
-                            "numbers": customer_numbers[:5],
-                        }
-
-                if score > 0:
-                    all_scored_customers.append(
-                        {
-                            "customer": customer,
-                            "score": score,
-                            "match_reasons": sorted(set(reasons)),
-                        }
-                    )
-
-            if len(customers) < per_page_value:
-                break
-
-            page_number += 1
-
-        if attempt_numbers_sample:
-            attempt_summary["phone_digits_checked_sample"] = attempt_numbers_sample
-
-        if all_scored_customers:
-            all_scored_customers.sort(key=lambda item: item["score"], reverse=True)
-            best = all_scored_customers[0]
-
-            tied_best = [item for item in all_scored_customers if item["score"] == best["score"]]
-            if len(tied_best) > 1:
-                attempt_summary["top_score"] = best["score"]
-                attempt_summary["ambiguous_candidates"] = len(tied_best)
-                if (ambiguous_record is None) or (best["score"] > ambiguous_record.get("score", 0)):
-                    ambiguous_record = {
-                        "score": best["score"],
-                        "candidates": len(tied_best),
-                    }
-                continue
-
-            result: Dict[str, Any] = {
-                "customer": best["customer"],
-                "match_score": best["score"],
-                "match_reasons": best["match_reasons"],
-                "customers_reviewed": total_reviewed,
-            }
-            if search_attempts:
-                result["phone_search_attempts"] = search_attempts
-            return result
-
-    if ambiguous_record:
-        details: Dict[str, Any] = {
-            "reason": "Multiple customers share the top match score",
-            "top_score": ambiguous_record["score"],
-            "candidates_considered": ambiguous_record["candidates"],
+    if not scored_customers:
+        return {
+            "error": "Customer not found",
+            "details": {"reason": "No confident match", "customers_reviewed": len(customers)},
         }
-        if search_attempts:
-            details["phone_search_attempts"] = search_attempts
-        if total_reviewed:
-            details["customers_reviewed"] = total_reviewed
+
+    scored_customers.sort(key=lambda item: item["score"], reverse=True)
+    best = scored_customers[0]
+    if len(scored_customers) > 1 and scored_customers[1]["score"] == best["score"]:
         return {
             "error": "Customer match ambiguous",
-            "details": details,
+            "details": {
+                "reason": "Multiple customers share the top match score",
+                "top_score": best["score"],
+                "candidates_considered": len(scored_customers),
+            },
         }
 
-    if best_partial_info:
-        similarity = int(best_partial_info.get("similarity", 0) or 0)
-        fallback_customer = best_partial_info["customer"]
-        candidate_numbers = best_partial_info.get("numbers") or []
-        variant_used = best_partial_info.get("variant")
-
-        name_parts = [
-            str(fallback_customer.get("first_name", "")).strip(),
-            str(fallback_customer.get("last_name", "")).strip(),
-        ]
-        customer_name = " ".join(part for part in name_parts if part)
-
-        closest_candidate_details = {
-            "customer_id": fallback_customer.get("id"),
-            "customer_name": customer_name or None,
-            "phone_digits_overlap": similarity,
-            "phone_numbers_sample": candidate_numbers,
-            "phone_query_used": variant_used,
-            "required_overlap_for_fallback": fallback_overlap_required,
-        }
-        if closest_candidate_details["customer_name"] is None:
-            closest_candidate_details.pop("customer_name", None)
-
-        if (
-            phone is not None
-            and phone_digits
-            and fallback_overlap_required > 0
-            and similarity >= fallback_overlap_required
-        ):
-            fallback_reasons = [
-                "Phone search fallback (low confidence)",
-                f"Shares last {similarity} trailing digits with query",
-            ]
-
-            result: Dict[str, Any] = {
-                "customer": fallback_customer,
-                "match_score": similarity * 5,
-                "match_reasons": fallback_reasons,
-                "confidence": "low",
-                "customers_reviewed": total_reviewed,
-            }
-            if search_attempts:
-                result["phone_search_attempts"] = search_attempts
-            result["fallback_details"] = {
-                "phone_query_used": variant_used,
-                "phone_digits_considered": candidate_numbers,
-                "similarity_digits": similarity,
-                "required_overlap": fallback_overlap_required,
-            }
-            return result
-
-    if first_customer_result and (not phone_digits):
-        fallback_customer = first_customer_result["customer"]
-        fallback_reasons = [
-            "Phone search fallback (API returned results without usable phone digits)"
-        ]
-        result = {
-            "customer": fallback_customer,
-            "match_score": 0,
-            "match_reasons": fallback_reasons,
-            "confidence": "very_low",
-            "customers_reviewed": total_reviewed,
-        }
-        if search_attempts:
-            result["phone_search_attempts"] = search_attempts
-        result["fallback_details"] = {
-            "phone_query_used": first_customer_result.get("phone_query"),
-            "results_examined": first_customer_result.get("results"),
-        }
-        return result
-
-    details: Dict[str, Any] = {}
-    if total_reviewed:
-        details["reason"] = "No confident match"
-        details["customers_reviewed"] = total_reviewed
-    else:
-        details["reason"] = "No customers returned for supplied criteria"
-    if search_attempts:
-        details["phone_search_attempts"] = search_attempts
-    if closest_candidate_details:
-        details["closest_candidate"] = closest_candidate_details
-    return {"error": "Customer not found", "details": details}
+    return {
+        "customer": best["customer"],
+        "match_score": best["score"],
+        "match_reasons": best["match_reasons"],
+    }
 
 
 @mcp.tool()
