@@ -469,7 +469,7 @@ async def update_job_schedule(
         data["employee_ids"] = employee_ids
     
     try:
-        result = await make_api_request("PUT", f"/jobs/{job_id}/schedule", data=data)
+        result = await make_api_request("PUT", f"/jobs/{job_id}/schedule", json_data=data)
         return json.dumps(result, indent=2)
     except Exception as e:
         return json.dumps({"error": f"Error updating schedule for job {job_id}: {str(e)}"}, indent=2)
