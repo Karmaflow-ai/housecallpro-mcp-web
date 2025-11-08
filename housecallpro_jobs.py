@@ -351,7 +351,7 @@ async def add_job_line_item(
         data["sku"] = sku
     
     try:
-        result = await make_api_request("POST", f"/jobs/{job_id}/line_items", data=data)
+        result = await make_api_request("POST", f"/jobs/{job_id}/line_items", json_data=data)
         return json.dumps(result, indent=2)
     except Exception as e:
         return json.dumps({"error": f"Error adding line item to job {job_id}: {str(e)}"}, indent=2)
@@ -374,7 +374,7 @@ async def bulk_update_job_line_items(
     }
     
     try:
-        result = await make_api_request("PUT", f"/jobs/{job_id}/line_items", data=data)
+        result = await make_api_request("PUT", f"/jobs/{job_id}/line_items", json_data=data)
         return json.dumps(result, indent=2)
     except Exception as e:
         return json.dumps({"error": f"Error bulk updating line items for job {job_id}: {str(e)}"}, indent=2)
@@ -420,7 +420,7 @@ async def update_job_line_item(
         data["sku"] = sku
     
     try:
-        result = await make_api_request("PUT", f"/jobs/{job_id}/line_items/{line_item_id}", data=data)
+        result = await make_api_request("PUT", f"/jobs/{job_id}/line_items/{line_item_id}", json_data=data)
         return json.dumps(result, indent=2)
     except Exception as e:
         return json.dumps({"error": f"Error updating line item {line_item_id} for job {job_id}: {str(e)}"}, indent=2)
@@ -507,7 +507,7 @@ async def dispatch_job_to_employees(
     }
     
     try:
-        result = await make_api_request("POST", f"/jobs/{job_id}/dispatch", data=data)
+        result = await make_api_request("POST", f"/jobs/{job_id}/dispatch", json_data=data)
         return json.dumps(result, indent=2)
     except Exception as e:
         return json.dumps({"error": f"Error dispatching job {job_id}: {str(e)}"}, indent=2)
@@ -547,7 +547,7 @@ async def bulk_update_job_input_materials(
     }
     
     try:
-        result = await make_api_request("PUT", f"/jobs/{job_id}/input_materials", data=data)
+        result = await make_api_request("PUT", f"/jobs/{job_id}/input_materials", json_data=data)
         return json.dumps(result, indent=2)
     except Exception as e:
         return json.dumps({"error": f"Error bulk updating input materials for job {job_id}: {str(e)}"}, indent=2)
@@ -569,7 +569,7 @@ async def add_job_tag(job_id: str, tag: str) -> str:
     }
     
     try:
-        result = await make_api_request("POST", f"/jobs/{job_id}/tags", data=data)
+        result = await make_api_request("POST", f"/jobs/{job_id}/tags", json_data=data)
         return json.dumps(result, indent=2)
     except Exception as e:
         return json.dumps({"error": f"Error adding tag to job {job_id}: {str(e)}"}, indent=2)
@@ -613,7 +613,7 @@ async def add_job_note(
     }
     
     try:
-        result = await make_api_request("POST", f"/jobs/{job_id}/notes", data=data)
+        result = await make_api_request("POST", f"/jobs/{job_id}/notes", json_data=data)
         return json.dumps(result, indent=2)
     except Exception as e:
         return json.dumps({"error": f"Error adding note to job {job_id}: {str(e)}"}, indent=2)
@@ -663,7 +663,7 @@ async def create_job_link(
         data["description"] = description
     
     try:
-        result = await make_api_request("POST", f"/jobs/{job_id}/links", data=data)
+        result = await make_api_request("POST", f"/jobs/{job_id}/links", json_data=data)
         return json.dumps(result, indent=2)
     except Exception as e:
         return json.dumps({"error": f"Error creating link for job {job_id}: {str(e)}"}, indent=2)

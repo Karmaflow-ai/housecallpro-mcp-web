@@ -122,7 +122,7 @@ async def create_webhook_subscription(
         if is_active is not None:
             webhook_data["is_active"] = is_active
         
-        result = await make_api_request("POST", "/webhooks", data=webhook_data)
+        result = await make_api_request("POST", "/webhooks", json_data=webhook_data)
         return result
         
     except Exception as e:

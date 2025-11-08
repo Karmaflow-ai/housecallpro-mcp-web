@@ -150,7 +150,7 @@ async def create_material_category(
         data["description"] = description.strip()
     
     try:
-        result = await make_api_request("POST", "/material_categories", data=data)
+        result = await make_api_request("POST", "/material_categories", json_data=data)
         return {
             "success": True,
             "data": result,
@@ -212,7 +212,7 @@ async def update_material_category(
         }
     
     try:
-        result = await make_api_request("PUT", f"/material_categories/{category_id}", data=data)
+        result = await make_api_request("PUT", f"/material_categories/{category_id}", json_data=data)
         return {
             "success": True,
             "data": result,
