@@ -608,7 +608,7 @@ async def add_job_note(
         note_type: Type of note (internal, customer_visible)
     """
     data = {
-        "note": note,
+        "content": note,
         "note_type": note_type,
     }
     
