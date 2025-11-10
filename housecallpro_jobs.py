@@ -596,7 +596,7 @@ async def remove_job_tag(job_id: str, tag: str) -> str:
 @mcp.tool()
 async def add_job_note(
     job_id: str,
-    note: str,
+    content: str,
     note_type: str = "internal",
 ) -> str:
     """
@@ -604,11 +604,11 @@ async def add_job_note(
     
     Args:
         job_id: ID of the job
-        note: Note content
+        content: Note content
         note_type: Type of note (internal, customer_visible)
     """
     data = {
-        "content": note,
+        "content": content,
         "note_type": note_type,
     }
     
