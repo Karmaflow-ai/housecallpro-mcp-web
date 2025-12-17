@@ -37,15 +37,80 @@ def get_headers() -> Dict[str, str]:
     }
 
 
-def make_api_request(method: str, endpoint: str, **kwargs) -> Dict[str, Any]:
+def _extract_id(payload: Any) -> Optional[str]:
+    if isinstance(payload, dict):
+        candidate = payload.get("id")
+        if candidate:
+            return str(candidate)
+        for key in ("customer", "lead", "data"):
+            nested = payload.get(key)
+            if isinstance(nested, dict):
+                nested_id = nested.get("id")
+                if nested_id:
+                    return str(nested_id)
+    return None
+
+
+def _split_customer_name(full_name: str) -> tuple[str, str]:
+    parts = [part for part in (full_name or "").strip().split() if part]
+    if not parts:
+        return "", ""
+    if len(parts) == 1:
+        return parts[0], ""
+    return parts[0], " ".join(parts[1:])
+
+
+async def make_api_request(
+    method: str,
+    endpoint: str,
+    *,
+    params: Optional[Dict[str, Any]] = None,
+    json_data: Optional[Any] = None,
+    data: Optional[Any] = None,
+    files: Optional[Any] = None,
+    timeout: float = 30.0,
+) -> Any:
     """Make an API request to Housecall Pro."""
     url = f"{API_BASE_URL}{endpoint}"
     headers = get_headers()
-    
-    with httpx.Client() as client:
-        response = client.request(method, url, headers=headers, **kwargs)
-        response.raise_for_status()
+
+    request_kwargs: Dict[str, Any] = {
+        "headers": headers,
+        "timeout": timeout,
+    }
+    if params:
+        request_kwargs["params"] = params
+    if json_data is not None:
+        request_kwargs["json"] = json_data
+    if data is not None:
+        request_kwargs["data"] = data
+    if files is not None:
+        request_kwargs["files"] = files
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.request(method, url, **request_kwargs)
+            response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        error_detail: Any = None
+        if exc.response is not None:
+            try:
+                error_detail = exc.response.json()
+            except ValueError:
+                error_detail = exc.response.text
+        raise RuntimeError(
+            f"Housecall Pro API {exc.response.status_code if exc.response else 'error'} "
+            f"for {endpoint}: {error_detail}"
+        ) from exc
+
+    if not response.content:
+        return {}
+
+    content_type = response.headers.get("Content-Type", "")
+    if "application/json" in content_type:
         return response.json()
+
+    return {"raw_response": response.text}
 
 
 @mcp.tool()
@@ -123,7 +188,7 @@ async def get_leads(
         if customer_phone:
             params["customer_phone"] = customer_phone
         
-        result = make_api_request("GET", "/leads", params=params)
+        result = await make_api_request("GET", "/leads", params=params)
         return json.dumps(result, indent=2)
         
     except Exception as e:
@@ -145,7 +210,7 @@ async def get_lead(lead_id: str) -> str:
         if not lead_id:
             return json.dumps({"error": "lead_id is required"}, indent=2)
         
-        result = make_api_request("GET", f"/leads/{lead_id}")
+        result = await make_api_request("GET", f"/leads/{lead_id}")
         return json.dumps(result, indent=2)
         
     except Exception as e:
@@ -154,7 +219,10 @@ async def get_lead(lead_id: str) -> str:
 
 @mcp.tool()
 async def create_lead(
-    customer_name: str,
+    customer_name: Optional[str] = None,
+    customer_id: Optional[str] = None,
+    customer_first_name: Optional[str] = None,
+    customer_last_name: Optional[str] = None,
     customer_phone: Optional[str] = None,
     customer_email: Optional[str] = None,
     address_street: Optional[str] = None,
@@ -174,7 +242,10 @@ async def create_lead(
     Create a new lead.
     
     Args:
-        customer_name: Name of the customer (required)
+        customer_name: Name of the customer
+        customer_id: ID of the customer
+        customer_first_name: First name of the customer
+        customer_last_name: Last name of the customer
         customer_phone: Customer phone number
         customer_email: Customer email address
         address_street: Street address
@@ -194,34 +265,62 @@ async def create_lead(
         JSON string containing created lead data or error message
     """
     try:
-        if not customer_name:
-            return json.dumps({"error": "customer_name is required"}, indent=2)
-        
-        lead_data = {
-            "customer": {
-                "name": customer_name
+        resolved_customer_id = (customer_id or "").strip() or None
+        if not resolved_customer_id:
+            resolved_first_name = (customer_first_name or "").strip() or None
+            resolved_last_name = (customer_last_name or "").strip() or None
+
+            if not resolved_first_name and customer_name:
+                first_name, last_name = _split_customer_name(customer_name)
+                resolved_first_name = first_name.strip() or None
+                resolved_last_name = last_name.strip() or None
+
+            if not resolved_first_name:
+                return json.dumps(
+                    {"error": "customer_id or customer_name/customer_first_name is required"},
+                    indent=2,
+                )
+
+            if not resolved_last_name:
+                resolved_last_name = "Unknown"
+
+            customer_payload: Dict[str, Any] = {
+                "first_name": resolved_first_name,
+                "last_name": resolved_last_name,
             }
+            if customer_email:
+                customer_payload["email"] = customer_email
+            if customer_phone:
+                customer_payload["mobile_number"] = customer_phone
+
+            customer_result = await make_api_request("POST", "/customers", json_data=customer_payload)
+            resolved_customer_id = _extract_id(customer_result)
+            if not resolved_customer_id:
+                return json.dumps(
+                    {"error": "Could not determine customer_id from /customers response", "response": customer_result},
+                    indent=2,
+                )
+
+            if all([address_street, address_city, address_state, address_zip]):
+                address_payload: Dict[str, Any] = {
+                    "street": address_street,
+                    "city": address_city,
+                    "state": address_state,
+                    "zip": address_zip,
+                    "country": "US",
+                    "type": "service",
+                    "is_primary": True,
+                }
+                await make_api_request(
+                    "POST",
+                    f"/customers/{resolved_customer_id}/addresses",
+                    json_data=address_payload,
+                )
+
+        lead_data: Dict[str, Any] = {
+            "customer_id": resolved_customer_id,
         }
-        
-        # Add customer contact info
-        if customer_phone:
-            lead_data["customer"]["phone"] = customer_phone
-        if customer_email:
-            lead_data["customer"]["email"] = customer_email
-        
-        # Add address if provided
-        if any([address_street, address_city, address_state, address_zip]):
-            lead_data["address"] = {}
-            if address_street:
-                lead_data["address"]["street"] = address_street
-            if address_city:
-                lead_data["address"]["city"] = address_city
-            if address_state:
-                lead_data["address"]["state"] = address_state
-            if address_zip:
-                lead_data["address"]["zip"] = address_zip
-        
-        # Add lead details
+
         if job_type_id:
             lead_data["job_type_id"] = job_type_id
         if source:
@@ -238,8 +337,8 @@ async def create_lead(
             lead_data["estimated_value"] = estimated_value
         if custom_fields:
             lead_data["custom_fields"] = custom_fields
-        
-        result = make_api_request("POST", "/leads", json=lead_data)
+
+        result = await make_api_request("POST", "/leads", json_data=lead_data)
         return json.dumps(result, indent=2)
         
     except Exception as e:
@@ -344,7 +443,7 @@ async def update_lead(
         if not update_data:
             return json.dumps({"error": "At least one field must be provided for update"}, indent=2)
         
-        result = make_api_request("PATCH", f"/leads/{lead_id}", json=update_data)
+        result = await make_api_request("PATCH", f"/leads/{lead_id}", json_data=update_data)
         return json.dumps(result, indent=2)
         
     except Exception as e:
@@ -395,7 +494,7 @@ async def convert_lead_to_job(
         if employee_ids:
             conversion_data["employee_ids"] = employee_ids
         
-        result = make_api_request("POST", f"/leads/{lead_id}/convert", json=conversion_data)
+        result = await make_api_request("POST", f"/leads/{lead_id}/convert", json_data=conversion_data)
         return json.dumps(result, indent=2)
         
     except Exception as e:
@@ -403,4 +502,4 @@ async def convert_lead_to_job(
 
 
 if __name__ == "__main__":
-    mcp.run() 
+    mcp.run()
