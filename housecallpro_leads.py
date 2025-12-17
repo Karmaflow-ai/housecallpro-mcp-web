@@ -219,124 +219,62 @@ async def get_lead(lead_id: str) -> str:
 
 @mcp.tool()
 async def create_lead(
-    customer_name: Optional[str] = None,
     customer_id: Optional[str] = None,
-    customer_first_name: Optional[str] = None,
-    customer_last_name: Optional[str] = None,
-    customer_phone: Optional[str] = None,
-    customer_email: Optional[str] = None,
-    address_street: Optional[str] = None,
-    address_city: Optional[str] = None,
-    address_state: Optional[str] = None,
-    address_zip: Optional[str] = None,
-    job_type_id: Optional[str] = None,
-    source: Optional[str] = None,
-    description: Optional[str] = None,
+    customer: Optional[Dict[str, Any]] = None,
+    lead_source: Optional[str] = None,
     notes: Optional[str] = None,
-    employee_id: Optional[str] = None,
-    priority: Optional[str] = None,
-    estimated_value: Optional[float] = None,
-    custom_fields: Optional[Dict[str, Any]] = None
+    tags: Optional[List[str]] = None,
+    addresses: Optional[List[Dict[str, Any]]] = None,
+    assigned_employee_id: Optional[str] = None,
+    address_id: Optional[str] = None,
+    address: Optional[Dict[str, Any]] = None,
+    line_items: Optional[List[Dict[str, Any]]] = None,
 ) -> str:
     """
     Create a new lead.
     
     Args:
-        customer_name: Name of the customer
-        customer_id: ID of the customer
-        customer_first_name: First name of the customer
-        customer_last_name: Last name of the customer
-        customer_phone: Customer phone number
-        customer_email: Customer email address
-        address_street: Street address
-        address_city: City
-        address_state: State
-        address_zip: ZIP code
-        job_type_id: ID of the job type for this lead
-        source: Lead source (website, referral, phone, etc.)
-        description: Description of the lead/work needed
-        notes: Additional notes about the lead
-        employee_id: ID of employee to assign the lead to
-        priority: Lead priority (low, medium, high)
-        estimated_value: Estimated value of the lead in dollars
-        custom_fields: Additional custom fields as key-value pairs
+        customer_id: ID of an existing customer (either this or customer is required)
+        customer: Customer object (either this or customer_id is required)
+        lead_source: Lead source
+        notes: Lead notes
+        tags: Lead tags
+        addresses: Array of address objects
+        assigned_employee_id: Employee ID to assign the lead to
+        address_id: Existing address ID for the lead
+        address: Address object for the lead
+        line_items: Array of line item objects
     
     Returns:
         JSON string containing created lead data or error message
     """
     try:
         resolved_customer_id = (customer_id or "").strip() or None
-        if not resolved_customer_id:
-            resolved_first_name = (customer_first_name or "").strip() or None
-            resolved_last_name = (customer_last_name or "").strip() or None
+        if not resolved_customer_id and not customer:
+            return json.dumps({"error": "customer_id or customer is required"}, indent=2)
 
-            if not resolved_first_name and customer_name:
-                first_name, last_name = _split_customer_name(customer_name)
-                resolved_first_name = first_name.strip() or None
-                resolved_last_name = last_name.strip() or None
+        lead_data: Dict[str, Any] = {}
+        if resolved_customer_id:
+            lead_data["customer_id"] = resolved_customer_id
+        if customer:
+            lead_data["customer"] = customer
 
-            if not resolved_first_name:
-                return json.dumps(
-                    {"error": "customer_id or customer_name/customer_first_name is required"},
-                    indent=2,
-                )
-
-            if not resolved_last_name:
-                resolved_last_name = "Unknown"
-
-            customer_payload: Dict[str, Any] = {
-                "first_name": resolved_first_name,
-                "last_name": resolved_last_name,
-            }
-            if customer_email:
-                customer_payload["email"] = customer_email
-            if customer_phone:
-                customer_payload["mobile_number"] = customer_phone
-
-            customer_result = await make_api_request("POST", "/customers", json_data=customer_payload)
-            resolved_customer_id = _extract_id(customer_result)
-            if not resolved_customer_id:
-                return json.dumps(
-                    {"error": "Could not determine customer_id from /customers response", "response": customer_result},
-                    indent=2,
-                )
-
-            if all([address_street, address_city, address_state, address_zip]):
-                address_payload: Dict[str, Any] = {
-                    "street": address_street,
-                    "city": address_city,
-                    "state": address_state,
-                    "zip": address_zip,
-                    "country": "US",
-                    "type": "service",
-                    "is_primary": True,
-                }
-                await make_api_request(
-                    "POST",
-                    f"/customers/{resolved_customer_id}/addresses",
-                    json_data=address_payload,
-                )
-
-        lead_data: Dict[str, Any] = {
-            "customer_id": resolved_customer_id,
-        }
-
-        if job_type_id:
-            lead_data["job_type_id"] = job_type_id
-        if source:
-            lead_data["source"] = source
-        if description:
-            lead_data["description"] = description
+        if lead_source:
+            lead_data["lead_source"] = lead_source
         if notes:
             lead_data["notes"] = notes
-        if employee_id:
-            lead_data["employee_id"] = employee_id
-        if priority:
-            lead_data["priority"] = priority
-        if estimated_value is not None:
-            lead_data["estimated_value"] = estimated_value
-        if custom_fields:
-            lead_data["custom_fields"] = custom_fields
+        if tags is not None:
+            lead_data["tags"] = tags
+        if addresses is not None:
+            lead_data["addresses"] = addresses
+        if assigned_employee_id:
+            lead_data["assigned_employee_id"] = assigned_employee_id
+        if address_id:
+            lead_data["address_id"] = address_id
+        if address:
+            lead_data["address"] = address
+        if line_items is not None:
+            lead_data["line_items"] = line_items
 
         result = await make_api_request("POST", "/leads", json_data=lead_data)
         return json.dumps(result, indent=2)
