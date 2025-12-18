@@ -221,14 +221,15 @@ async def get_lead(lead_id: str) -> str:
 async def create_lead(
     customer_id: Optional[str] = None,
     customer: Optional[Dict[str, Any]] = None,
-    lead_source: Optional[str] = None,
-    notes: Optional[str] = None,
-    tags: Optional[List[str]] = None,
-    addresses: Optional[List[Dict[str, Any]]] = None,
     assigned_employee_id: Optional[str] = None,
     address_id: Optional[str] = None,
     address: Optional[Dict[str, Any]] = None,
+    lead_source: Optional[str] = None,
     line_items: Optional[List[Dict[str, Any]]] = None,
+    note: Optional[str] = None,
+    tags: Optional[List[str]] = None,
+    tax_name: Optional[str] = None,
+    tax_rate: Optional[float] = None,
 ) -> str:
     """
     Create a new lead.
@@ -236,14 +237,15 @@ async def create_lead(
     Args:
         customer_id: ID of an existing customer (either this or customer is required)
         customer: Customer object (either this or customer_id is required)
-        lead_source: Lead source
-        notes: Lead notes
-        tags: Lead tags
-        addresses: Array of address objects
         assigned_employee_id: Employee ID to assign the lead to
         address_id: Existing address ID for the lead
         address: Address object for the lead
+        lead_source: Lead source
         line_items: Array of line item objects
+        note: Lead note
+        tags: Lead tags
+        tax_name: Tax name
+        tax_rate: Tax rate
     
     Returns:
         JSON string containing created lead data or error message
@@ -261,12 +263,6 @@ async def create_lead(
 
         if lead_source:
             lead_data["lead_source"] = lead_source
-        if notes:
-            lead_data["notes"] = notes
-        if tags is not None:
-            lead_data["tags"] = tags
-        if addresses is not None:
-            lead_data["addresses"] = addresses
         if assigned_employee_id:
             lead_data["assigned_employee_id"] = assigned_employee_id
         if address_id:
@@ -275,6 +271,14 @@ async def create_lead(
             lead_data["address"] = address
         if line_items is not None:
             lead_data["line_items"] = line_items
+        if note is not None:
+            lead_data["note"] = note
+        if tags is not None:
+            lead_data["tags"] = tags
+        if tax_name:
+            lead_data["tax_name"] = tax_name
+        if tax_rate is not None:
+            lead_data["tax_rate"] = tax_rate
 
         result = await make_api_request("POST", "/leads", json_data=lead_data)
         return json.dumps(result, indent=2)
