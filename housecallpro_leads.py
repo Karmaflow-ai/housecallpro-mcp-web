@@ -13,6 +13,7 @@ from typing import Optional, Dict, Any, List
 import httpx
 from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
+from pydantic import BaseModel, ConfigDict
 
 # Load environment variables
 load_dotenv()
@@ -26,6 +27,44 @@ API_BASE_URL = "https://api.housecallpro.com"
 
 if not API_KEY:
     raise ValueError("HOUSECALL_PRO_API_KEY environment variable is required")
+
+
+class LeadAddress(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    city: Optional[str] = None
+    state: Optional[str] = None
+    street: Optional[str] = None
+    street_line_2: Optional[str] = None
+    zip: Optional[str] = None
+
+
+class LeadCustomer(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    first_name: str
+    last_name: str
+    email: Optional[str] = None
+    notifications_enabled: Optional[bool] = None
+    mobile_number: Optional[str] = None
+    company: Optional[str] = None
+    home_number: Optional[str] = None
+    work_number: Optional[str] = None
+    lead_source: Optional[str] = None
+    notes: Optional[str] = None
+    tags: Optional[List[str]] = None
+    addresses: Optional[List[LeadAddress]] = None
+
+
+class LeadLineItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    description: Optional[str] = None
+    kind: str
+    name: str
+    quantity: int
+    unit_cost: float
+    unit_price: float
 
 
 def get_headers() -> Dict[str, str]:
@@ -220,12 +259,12 @@ async def get_lead(lead_id: str) -> str:
 @mcp.tool()
 async def create_lead(
     customer_id: Optional[str] = None,
-    customer: Optional[Dict[str, Any]] = None,
+    customer: Optional[LeadCustomer] = None,
     assigned_employee_id: Optional[str] = None,
     address_id: Optional[str] = None,
-    address: Optional[Dict[str, Any]] = None,
+    address: Optional[LeadAddress] = None,
     lead_source: Optional[str] = None,
-    line_items: Optional[List[Dict[str, Any]]] = None,
+    line_items: Optional[List[LeadLineItem]] = None,
     note: Optional[str] = None,
     tags: Optional[List[str]] = None,
     tax_name: Optional[str] = None,
@@ -259,7 +298,7 @@ async def create_lead(
         if resolved_customer_id:
             lead_data["customer_id"] = resolved_customer_id
         if customer:
-            lead_data["customer"] = customer
+            lead_data["customer"] = customer.model_dump(exclude_none=True)
 
         if lead_source:
             lead_data["lead_source"] = lead_source
@@ -268,9 +307,9 @@ async def create_lead(
         if address_id:
             lead_data["address_id"] = address_id
         if address:
-            lead_data["address"] = address
+            lead_data["address"] = address.model_dump(exclude_none=True)
         if line_items is not None:
-            lead_data["line_items"] = line_items
+            lead_data["line_items"] = [item.model_dump(exclude_none=True) for item in line_items]
         if note is not None:
             lead_data["note"] = note
         if tags is not None:
