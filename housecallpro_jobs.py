@@ -105,7 +105,7 @@ async def get_jobs(
     status: Optional[str] = None,
     date_start: Optional[str] = None,
     date_end: Optional[str] = None,
-    work_status: Optional[str] = None,
+    work_status: Optional[List[str]] = None,
     tags: Optional[str] = None,
     include_notes: Optional[bool] = None,
     include_line_items: Optional[bool] = None,
@@ -132,7 +132,7 @@ async def get_jobs(
         status: Filter by job status (scheduled, in_progress, completed, cancelled)
         date_start: Start date filter (YYYY-MM-DD format)
         date_end: End date filter (YYYY-MM-DD format)
-        work_status: Filter by work status
+        work_status: Filter by work status (array of strings, e.g. ["unscheduled", "scheduled"])
         tags: Filter by tags (comma-separated)
         include_notes: Include job notes in response
         include_line_items: Include line items in response
@@ -163,7 +163,7 @@ async def get_jobs(
     if date_end:
         params["date_end"] = date_end
     if work_status:
-        params["work_status"] = work_status
+        params["work_status[]"] = work_status
     if sort_by:
         params["sort_by"] = sort_by
     if sort_direction:
