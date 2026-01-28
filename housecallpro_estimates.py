@@ -130,5 +130,30 @@ def create_estimate(
     return json.dumps(result, indent=2)
 
 
+@mcp.tool()
+def add_estimate_option_note(
+    estimate_id: str,
+    option_id: str,
+    content: str
+) -> str:
+    """
+    Create a new estimate option note.
+    
+    Args:
+        estimate_id: ID of the estimate (required)
+        option_id: ID of the estimate option (required)
+        content: Note content (required)
+    
+    Returns:
+        JSON string containing the created note with id and content
+    """
+    data = {
+        "content": content
+    }
+    
+    result = make_api_request("POST", f"estimates/{estimate_id}/options/{option_id}/notes", json=data)
+    return json.dumps(result, indent=2)
+
+
 if __name__ == "__main__":
     mcp.run()
