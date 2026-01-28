@@ -130,52 +130,5 @@ def create_estimate(
     return json.dumps(result, indent=2)
 
 
-@mcp.tool()
-def update_estimate(
-    estimate_id: str,
-    notes: Optional[str] = None,
-    work_status: Optional[str] = None,
-    line_items: Optional[List[Dict[str, Any]]] = None
-) -> str:
-    """
-    Update an existing estimate in Housecall Pro.
-    
-    Args:
-        estimate_id: ID of the estimate to update (required)
-        notes: Updated notes for the estimate
-        work_status: Updated status of the work
-        line_items: Updated list of line items
-    
-    Returns:
-        JSON string containing the updated estimate data
-    """
-    data = {}
-    
-    if notes is not None:
-        data["notes"] = notes
-    if work_status is not None:
-        data["work_status"] = work_status
-    if line_items is not None:
-        data["line_items"] = line_items
-    
-    result = make_api_request("PUT", f"estimates/{estimate_id}", json=data)
-    return json.dumps(result, indent=2)
-
-
-@mcp.tool()
-def delete_estimate(estimate_id: str) -> str:
-    """
-    Delete an estimate from Housecall Pro.
-    
-    Args:
-        estimate_id: ID of the estimate to delete (required)
-    
-    Returns:
-        JSON string confirming deletion
-    """
-    result = make_api_request("DELETE", f"estimates/{estimate_id}")
-    return json.dumps(result, indent=2)
-
-
 if __name__ == "__main__":
-    mcp.run() 
+    mcp.run()
