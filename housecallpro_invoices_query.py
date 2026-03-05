@@ -43,7 +43,17 @@ def make_api_request(method: str, endpoint: str, **kwargs) -> Dict[str, Any]:
     
     with httpx.Client() as client:
         response = client.request(method, url, headers=headers, **kwargs)
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            error_detail = None
+            try:
+                error_detail = exc.response.json()
+            except Exception:
+                error_detail = exc.response.text
+            raise RuntimeError(
+                f"Housecall Pro API {exc.response.status_code} for {endpoint}: {error_detail}"
+            ) from exc
         return response.json()
 
 
