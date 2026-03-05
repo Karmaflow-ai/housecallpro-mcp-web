@@ -80,57 +80,60 @@ async def get_job_invoices(
 
 @mcp.tool()
 async def get_invoices(
-    customer_id: Optional[str] = None,
-    job_id: Optional[str] = None,
+    customer_uuid: Optional[str] = None,
     status: Optional[str] = None,
-    number: Optional[str] = None,
-    invoice_date_start: Optional[str] = None,
-    invoice_date_end: Optional[str] = None,
-    due_date_start: Optional[str] = None,
-    due_date_end: Optional[str] = None,
-    paid_date_start: Optional[str] = None,
-    paid_date_end: Optional[str] = None,
+    due_at_min: Optional[str] = None,
+    due_at_max: Optional[str] = None,
+    amount_due_min: Optional[int] = None,
+    amount_due_max: Optional[int] = None,
+    created_at_min: Optional[str] = None,
+    created_at_max: Optional[str] = None,
+    paid_at_min: Optional[str] = None,
+    paid_at_max: Optional[str] = None,
+    payment_method: Optional[str] = None,
     page: Optional[int] = None,
     page_size: Optional[int] = None,
     sort_by: Optional[str] = None,
-    sort_dir: Optional[str] = None,
+    sort_direction: Optional[str] = None,
 ) -> str:
     """
     Retrieve a list of invoices with optional filtering.
     
     Args:
-        customer_id: Filter by customer ID
-        job_id: Filter by job ID
-        status: Filter by invoice status (DRAFT, SENT, PAID, BAD_DEBT)
-        number: Filter by invoice number
-        invoice_date_start: Start of invoice date range (YYYY-MM-DD)
-        invoice_date_end: End of invoice date range (YYYY-MM-DD)
-        due_date_start: Start of due date range (YYYY-MM-DD)
-        due_date_end: End of due date range (YYYY-MM-DD)
-        paid_date_start: Start of paid date range (YYYY-MM-DD)
-        paid_date_end: End of paid date range (YYYY-MM-DD)
-        page: Page number to retrieve
-        page_size: Number of results per page (default 25, max 100)
-        sort_by: Field to sort by (invoice_date, due_date, etc.)
-        sort_dir: Sort direction (asc or desc)
+        customer_uuid: Filter by customer UUID
+        status: Filter by invoice status (open, pending_payment, paid, voided, uncollectible, canceled)
+        due_at_min: Minimum due date filter (ISO 8601, e.g. 2025-09-05T00:00:00Z)
+        due_at_max: Maximum due date filter (ISO 8601, e.g. 2026-01-04T00:00:00Z)
+        amount_due_min: Minimum amount due in cents (e.g. 1 = $0.01)
+        amount_due_max: Maximum amount due in cents
+        created_at_min: Return invoices created after this date (ISO 8601)
+        created_at_max: Return invoices created before this date (ISO 8601)
+        paid_at_min: Return invoices paid after this date (ISO 8601)
+        paid_at_max: Return invoices paid before this date (ISO 8601)
+        payment_method: Filter by payment method
+        page: Page number to retrieve (default 1)
+        page_size: Number of results per page (default 25, max 100). Must be a string.
+        sort_by: Field to sort by (amount, created_at, due_amount, due_at, invoice_number, paid_at, sent_at, status, updated_at)
+        sort_direction: Sort direction (asc or desc)
     """
     params = {
         k: v
         for k, v in {
-            "customer_id": customer_id,
-            "job_id": job_id,
+            "customer_uuid": customer_uuid,
             "status": status,
-            "number": number,
-            "invoice_date_start": invoice_date_start,
-            "invoice_date_end": invoice_date_end,
-            "due_date_start": due_date_start,
-            "due_date_end": due_date_end,
-            "paid_date_start": paid_date_start,
-            "paid_date_end": paid_date_end,
+            "due_at_min": due_at_min,
+            "due_at_max": due_at_max,
+            "amount_due_min": amount_due_min,
+            "amount_due_max": amount_due_max,
+            "created_at_min": created_at_min,
+            "created_at_max": created_at_max,
+            "paid_at_min": paid_at_min,
+            "paid_at_max": paid_at_max,
+            "payment_method": payment_method,
             "page": page,
             "page_size": page_size,
             "sort_by": sort_by,
-            "sort_dir": sort_dir,
+            "sort_direction": sort_direction,
         }.items()
         if v is not None
     }
