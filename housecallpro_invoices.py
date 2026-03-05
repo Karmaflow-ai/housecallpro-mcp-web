@@ -81,80 +81,62 @@ async def get_job_invoices(
 @mcp.tool()
 async def get_invoices(
     customer_id: Optional[str] = None,
+    job_id: Optional[str] = None,
     status: Optional[str] = None,
+    number: Optional[str] = None,
+    invoice_date_start: Optional[str] = None,
+    invoice_date_end: Optional[str] = None,
     due_date_start: Optional[str] = None,
     due_date_end: Optional[str] = None,
-    created_after: Optional[str] = None,
-    created_before: Optional[str] = None,
-    updated_after: Optional[str] = None,
-    updated_before: Optional[str] = None,
-    sent: Optional[bool] = None,
-    past_due: Optional[bool] = None,
+    paid_date_start: Optional[str] = None,
+    paid_date_end: Optional[str] = None,
     page: Optional[int] = None,
     page_size: Optional[int] = None,
     sort_by: Optional[str] = None,
-    sort_direction: Optional[str] = None,
-    include_line_items: Optional[bool] = None,
-    include_attachments: Optional[bool] = None
+    sort_dir: Optional[str] = None,
 ) -> str:
     """
     Retrieve a list of invoices with optional filtering.
     
     Args:
         customer_id: Filter by customer ID
-        status: Filter by invoice status (open, paid, voided, etc.)
-        due_date_start: Start date filter for due dates (YYYY-MM-DD format)
-        due_date_end: End date filter for due dates (YYYY-MM-DD format)
-        created_after: Return invoices created after this date (ISO 8601)
-        created_before: Return invoices created before this date (ISO 8601)
-        updated_after: Return invoices updated after this date (ISO 8601)
-        updated_before: Return invoices updated before this date (ISO 8601)
-        sent: Filter by whether invoice has been sent to customer
-        past_due: Filter by whether invoice is past due
+        job_id: Filter by job ID
+        status: Filter by invoice status (DRAFT, SENT, PAID, BAD_DEBT)
+        number: Filter by invoice number
+        invoice_date_start: Start of invoice date range (YYYY-MM-DD)
+        invoice_date_end: End of invoice date range (YYYY-MM-DD)
+        due_date_start: Start of due date range (YYYY-MM-DD)
+        due_date_end: End of due date range (YYYY-MM-DD)
+        paid_date_start: Start of paid date range (YYYY-MM-DD)
+        paid_date_end: End of paid date range (YYYY-MM-DD)
         page: Page number to retrieve
         page_size: Number of results per page (default 25, max 100)
-        sort_by: Field to sort by (created_at, due_date, amount, etc.)
-        sort_direction: Sort direction (asc or desc)
-        include_line_items: Include line items in response
-        include_attachments: Include attachments in response
+        sort_by: Field to sort by (invoice_date, due_date, etc.)
+        sort_dir: Sort direction (asc or desc)
     """
-    params = {}
-    
-    if customer_id:
-        params["customer_id"] = customer_id
-    if status:
-        params["status"] = status
-    if due_date_start:
-        params["due_date_start"] = due_date_start
-    if due_date_end:
-        params["due_date_end"] = due_date_end
-    if created_after:
-        params["created_after"] = created_after
-    if created_before:
-        params["created_before"] = created_before
-    if updated_after:
-        params["updated_after"] = updated_after
-    if updated_before:
-        params["updated_before"] = updated_before
-    if sent is not None:
-        params["sent"] = str(sent).lower()
-    if past_due is not None:
-        params["past_due"] = str(past_due).lower()
-    if page:
-        params["page"] = page
-    if page_size:
-        params["page_size"] = page_size
-    if sort_by:
-        params["sort_by"] = sort_by
-    if sort_direction:
-        params["sort_direction"] = sort_direction
-    if include_line_items is not None:
-        params["include_line_items"] = str(include_line_items).lower()
-    if include_attachments is not None:
-        params["include_attachments"] = str(include_attachments).lower()
+    params = {
+        k: v
+        for k, v in {
+            "customer_id": customer_id,
+            "job_id": job_id,
+            "status": status,
+            "number": number,
+            "invoice_date_start": invoice_date_start,
+            "invoice_date_end": invoice_date_end,
+            "due_date_start": due_date_start,
+            "due_date_end": due_date_end,
+            "paid_date_start": paid_date_start,
+            "paid_date_end": paid_date_end,
+            "page": page,
+            "page_size": page_size,
+            "sort_by": sort_by,
+            "sort_dir": sort_dir,
+        }.items()
+        if v is not None
+    }
     
     try:
-        result = make_api_request("GET", "/invoices", params=params)
+        result = make_api_request("GET", "/v1/invoices", params=params)
         return json.dumps(result, indent=2)
     except Exception as e:
         return f"Error getting invoices: {str(e)}"
