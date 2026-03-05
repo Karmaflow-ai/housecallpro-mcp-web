@@ -136,7 +136,7 @@ async def get_invoices(
     }
     
     try:
-        result = make_api_request("GET", "/v1/invoices", params=params)
+        result = make_api_request("GET", "/invoices", params=params)
         return json.dumps(result, indent=2)
     except Exception as e:
         return f"Error getting invoices: {str(e)}"

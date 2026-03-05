@@ -107,7 +107,7 @@ async def get_invoices(
         if v is not None
     }
 
-    return make_api_request("GET", "/v1/invoices", params=params)
+    return make_api_request("GET", "/invoices", params=params)
 
 
 if __name__ == "__main__":
