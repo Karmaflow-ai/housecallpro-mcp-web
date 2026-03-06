@@ -102,7 +102,6 @@ async def get_invoices(
         k: v
         for k, v in {
             "customer_uuid": customer_uuid,
-            "status": status,
             "due_at_min": due_at_min,
             "due_at_max": due_at_max,
             "amount_due_min": amount_due_min,
@@ -119,6 +118,11 @@ async def get_invoices(
         }.items()
         if v is not None
     }
+
+    # HCP API requires status as an array param (status[]=open)
+    if status:
+        statuses = [s.strip() for s in status.split(",")]
+        params["status[]"] = statuses
 
     return make_api_request("GET", "/invoices", params=params)
 
