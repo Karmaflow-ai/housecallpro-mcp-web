@@ -98,34 +98,50 @@ def get_estimates(
 def create_estimate(
     customer_id: str,
     employee_id: str,
-    line_items: List[Dict[str, Any]],
+    options: List[Dict[str, Any]],
+    address_id: Optional[str] = None,
     notes: Optional[str] = None,
     work_status: Optional[str] = None
 ) -> str:
     """
     Create a new estimate in Housecall Pro.
-    
+
+    Housecall Pro estimates are multi-option: line items are nested inside one
+    or more options (e.g. good/better/best pricing tiers). Even a single-tier
+    estimate must be wrapped in an option. Sending line_items at the top level
+    will fail with `{"errors":{"options":"is missing"}}`.
+
     Args:
         customer_id: ID of the customer (required)
         employee_id: ID of the employee creating the estimate (required)
-        line_items: List of line items for the estimate (required)
+        options: List of estimate options (required, at least one). Each option
+            is a dict with:
+              - name (str, required): display name (e.g. "Standard Install")
+              - message (str, optional): customer-facing description
+              - line_items (list, required): list of line item dicts. Each line
+                item typically has: name (str), description (str, optional),
+                quantity (number), unit_price (integer, in cents),
+                kind (str, optional: "labor"|"materials"|...), taxable (bool, optional)
+        address_id: ID of the service address (optional)
         notes: Additional notes for the estimate
         work_status: Status of the work (e.g., "pending", "approved", "declined")
-    
+
     Returns:
         JSON string containing the created estimate data
     """
     data = {
         "customer_id": customer_id,
         "employee_id": employee_id,
-        "line_items": line_items
+        "options": options
     }
-    
+
+    if address_id:
+        data["address_id"] = address_id
     if notes:
         data["notes"] = notes
     if work_status:
         data["work_status"] = work_status
-    
+
     result = make_api_request("POST", "estimates", json=data)
     return json.dumps(result, indent=2)
 
@@ -135,29 +151,32 @@ def update_estimate(
     estimate_id: str,
     notes: Optional[str] = None,
     work_status: Optional[str] = None,
-    line_items: Optional[List[Dict[str, Any]]] = None
+    options: Optional[List[Dict[str, Any]]] = None
 ) -> str:
     """
     Update an existing estimate in Housecall Pro.
-    
+
     Args:
         estimate_id: ID of the estimate to update (required)
         notes: Updated notes for the estimate
         work_status: Updated status of the work
-        line_items: Updated list of line items
-    
+        options: Updated list of estimate options. Each option is a dict with
+            name (str), optional message (str), and line_items (list of dicts
+            with name/quantity/unit_price/...). See create_estimate for the
+            full option/line-item shape.
+
     Returns:
         JSON string containing the updated estimate data
     """
     data = {}
-    
+
     if notes is not None:
         data["notes"] = notes
     if work_status is not None:
         data["work_status"] = work_status
-    if line_items is not None:
-        data["line_items"] = line_items
-    
+    if options is not None:
+        data["options"] = options
+
     result = make_api_request("PUT", f"estimates/{estimate_id}", json=data)
     return json.dumps(result, indent=2)
 

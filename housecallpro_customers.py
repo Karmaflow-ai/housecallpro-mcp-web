@@ -283,7 +283,7 @@ async def create_customer_address(
     city: str,
     state: str,
     zip: str,
-    country: Optional[str] = "US",
+    country: str,
     type: Optional[str] = "service",
     notes: Optional[str] = None,
     contact_name: Optional[str] = None,
@@ -292,14 +292,17 @@ async def create_customer_address(
 ) -> dict:
     """
     Create a new address for a customer.
-    
+
     Args:
         customer_id: The unique identifier for the customer (required)
         street: Street address (required)
         city: City (required)
-        state: State (required)
-        zip: ZIP code (required)
-        country: Country code (default: "US")
+        state: State or province code (required). Use 2-letter codes — US states
+            (e.g. "CA", "NY", "TX") or Canadian provinces (e.g. "ON", "QC", "BC", "AB").
+        zip: ZIP or postal code (required). Canadian postal codes use the
+            "A1A 1A1" format.
+        country: ISO country code (required). "US" for United States, "CA" for
+            Canada. This must be set explicitly — do not assume US.
         type: Address type (e.g., "service", "billing") (default: "service")
         notes: Notes about the address
         contact_name: Contact person at this address
