@@ -38,23 +38,30 @@ def get_headers() -> Dict[str, str]:
 
 
 def make_api_request(method: str, endpoint: str, **kwargs) -> Dict[str, Any]:
-    """Make an API request to Housecall Pro."""
+    """Make an API request to Housecall Pro.
+
+    Raises RuntimeError on HTTP 4xx/5xx so FastMCP surfaces the call as
+    isError=true rather than a successful-looking JSON-string error blob.
+    """
     url = f"{API_BASE_URL}/{endpoint.lstrip('/')}"
-    
-    # Add headers
+
     headers = get_headers()
     if 'headers' in kwargs:
         headers.update(kwargs.pop('headers'))
-    
-    try:
-        with httpx.Client() as client:
-            response = client.request(method, url, headers=headers, **kwargs)
+
+    with httpx.Client() as client:
+        response = client.request(method, url, headers=headers, **kwargs)
+        try:
             response.raise_for_status()
-            return response.json() if response.content else {}
-    except httpx.HTTPStatusError as e:
-        return json.dumps({"error": f"HTTP {e.response.status_code}: {e.response.text}"}, indent=2)
-    except Exception as e:
-        return json.dumps({"error": f"Request failed: {str(e)}"}, indent=2)
+        except httpx.HTTPStatusError as exc:
+            try:
+                error_detail = exc.response.json()
+            except Exception:
+                error_detail = exc.response.text
+            raise RuntimeError(
+                f"Housecall Pro API {exc.response.status_code} for {endpoint}: {error_detail}"
+            ) from exc
+        return response.json() if response.content else {}
 
 
 @mcp.tool()
@@ -97,35 +104,56 @@ def get_estimates(
 @mcp.tool()
 def create_estimate(
     customer_id: str,
-    employee_id: str,
-    line_items: List[Dict[str, Any]],
-    notes: Optional[str] = None,
-    work_status: Optional[str] = None
+    address_id: str,
+    assigned_employee_ids: List[str],
+    options: List[Dict[str, Any]],
+    lead_source: Optional[str] = None,
+    note: Optional[str] = None,
 ) -> str:
     """
     Create a new estimate in Housecall Pro.
-    
+
+    Matches the HCP POST /estimates contract: estimates are composed of one
+    or more options, and each option owns its own line_items. There is no
+    root-level line_items field, and employees are assigned via the plural
+    assigned_employee_ids array.
+
     Args:
-        customer_id: ID of the customer (required)
-        employee_id: ID of the employee creating the estimate (required)
-        line_items: List of line items for the estimate (required)
-        notes: Additional notes for the estimate
-        work_status: Status of the work (e.g., "pending", "approved", "declined")
-    
+        customer_id: HCP customer id, e.g. "cus_..." (required)
+        address_id: HCP service address id, e.g. "adr_..." (required)
+        assigned_employee_ids: Employee ids assigned to the estimate, e.g.
+            ["pro_..."] (required; plural array, not singular employee_id)
+        options: At least one estimate option (required). Each option is:
+            {
+              "name": str,
+              "line_items": [
+                {
+                  "name": str,
+                  "unit_price": int,   # cents
+                  "quantity": float,
+                  "kind": "labor" | "materials"
+                }
+              ],
+              "message": Optional[str]
+            }
+        lead_source: Lead source label; must match a value configured in HCP.
+        note: Estimate-level note (singular field name per HCP, not "notes").
+
     Returns:
-        JSON string containing the created estimate data
+        JSON string containing the created estimate data.
     """
-    data = {
+    data: Dict[str, Any] = {
         "customer_id": customer_id,
-        "employee_id": employee_id,
-        "line_items": line_items
+        "address_id": address_id,
+        "assigned_employee_ids": assigned_employee_ids,
+        "options": options,
     }
-    
-    if notes:
-        data["notes"] = notes
-    if work_status:
-        data["work_status"] = work_status
-    
+
+    if lead_source:
+        data["lead_source"] = lead_source
+    if note:
+        data["note"] = note
+
     result = make_api_request("POST", "estimates", json=data)
     return json.dumps(result, indent=2)
 
