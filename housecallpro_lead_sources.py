@@ -98,7 +98,7 @@ async def create_lead_source(
         if is_active is not None:
             lead_source_data["is_active"] = is_active
         
-        result = await make_api_request("POST", "/lead_sources", json_data=lead_source_data)
+        result = await make_api_request("POST", "/lead_sources", data=lead_source_data)
         return result
         
     except Exception as e:
@@ -140,7 +140,7 @@ async def update_lead_source(
         if not update_data:
             return {"error": "At least one field (name or is_active) must be provided for update"}
         
-        result = await make_api_request("PUT", f"/lead_sources/{lead_source_id}", json_data=update_data)
+        result = await make_api_request("PUT", f"/lead_sources/{lead_source_id}", data=update_data)
         return result
         
     except Exception as e:
