@@ -94,39 +94,111 @@ def get_estimates(
     return json.dumps(result, indent=2)
 
 
+_PLACEHOLDER_OPTION = {
+    "name": "Estimate",
+    "line_items": [
+        {
+            "name": "On-Site Assessment",
+            "description": "Free in-home estimate visit",
+            "unit_price": 0,
+            "quantity": 1,
+        }
+    ],
+}
+
+
 @mcp.tool()
 def create_estimate(
     customer_id: str,
-    employee_id: str,
-    line_items: List[Dict[str, Any]],
-    notes: Optional[str] = None,
-    work_status: Optional[str] = None
+    options: Optional[List[Dict[str, Any]]] = None,
+    assigned_employee_ids: Optional[List[str]] = None,
+    address_id: Optional[str] = None,
+    lead_source: Optional[str] = None,
+    note: Optional[str] = None,
+    message: Optional[str] = None
 ) -> str:
     """
     Create a new estimate in Housecall Pro.
-    
+
+    Line items must be nested inside options (e.g. good/better/best tiers).
+    Even a single-tier estimate needs at least one option wrapping its line
+    items. If options is omitted or empty, a zero-dollar placeholder option
+    is created automatically so the estimate can be filled in later by staff.
+
     Args:
         customer_id: ID of the customer (required)
-        employee_id: ID of the employee creating the estimate (required)
-        line_items: List of line items for the estimate (required)
-        notes: Additional notes for the estimate
-        work_status: Status of the work (e.g., "pending", "approved", "declined")
-    
+        options: List of estimate options. Each option is a dict with:
+              - name (str, required): display name (e.g. "Standard Install")
+              - line_items (list, required): list of line item dicts with
+                name (str), description (str, optional), unit_price (int, cents),
+                quantity (number), unit_cost (int, cents, optional),
+                taxable (bool, optional)
+              - tags (list of str, optional)
+              - tax (dict, optional): {taxable, tax_rate, tax_name}
+            If omitted or empty, a $0 placeholder option is used.
+        assigned_employee_ids: List of employee IDs to assign (optional)
+        address_id: ID of an existing service address (optional)
+        lead_source: Lead source name (optional)
+        note: Internal note for the estimate (optional)
+        message: Customer-facing message (optional)
+
     Returns:
         JSON string containing the created estimate data
     """
+    if not options:
+        options = [_PLACEHOLDER_OPTION]
+
     data = {
         "customer_id": customer_id,
-        "employee_id": employee_id,
+        "options": options
+    }
+
+    if assigned_employee_ids:
+        data["assigned_employee_ids"] = assigned_employee_ids
+    if address_id:
+        data["address_id"] = address_id
+    if lead_source:
+        data["lead_source"] = lead_source
+    if note:
+        data["note"] = note
+    if message:
+        data["message"] = message
+
+    result = make_api_request("POST", "estimates", json=data)
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+def add_estimate_option(
+    estimate_id: str,
+    name: str,
+    line_items: List[Dict[str, Any]],
+    tax: Optional[Dict[str, Any]] = None
+) -> str:
+    """
+    Add an option to an existing estimate.
+
+    Args:
+        estimate_id: ID of the estimate (required)
+        name: Display name for the option (required, e.g. "Option A")
+        line_items: List of line item dicts (required). Each has:
+            name (str), description (str, optional), unit_price (int, cents),
+            quantity (number), unit_cost (int, cents, optional),
+            taxable (bool, optional)
+        tax: Tax config dict (optional): {taxable, tax_rate, tax_name}
+
+    Returns:
+        JSON string containing the created option data
+    """
+    data = {
+        "name": name,
         "line_items": line_items
     }
-    
-    if notes:
-        data["notes"] = notes
-    if work_status:
-        data["work_status"] = work_status
-    
-    result = make_api_request("POST", "estimates", json=data)
+
+    if tax:
+        data["tax"] = tax
+
+    result = make_api_request("POST", f"estimates/{estimate_id}/options", json=data)
     return json.dumps(result, indent=2)
 
 
@@ -137,20 +209,20 @@ def add_estimate_option_note(
     content: str
 ) -> str:
     """
-    Create a new estimate option note.
-    
+    Add a note to an estimate option.
+
     Args:
         estimate_id: ID of the estimate (required)
         option_id: ID of the estimate option (required)
         content: Note content (required)
-    
+
     Returns:
         JSON string containing the created note with id and content
     """
     data = {
         "content": content
     }
-    
+
     result = make_api_request("POST", f"estimates/{estimate_id}/options/{option_id}/notes", json=data)
     return json.dumps(result, indent=2)
 
